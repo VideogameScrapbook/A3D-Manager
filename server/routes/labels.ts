@@ -14,6 +14,7 @@ import {
   deleteEntryFromLabelsDb,
   updateEntryInLabelsDb,
 } from '../lib/labels-db-core.js';
+import { getOwnedCartIds } from '../lib/owned-carts.js';
 
 const router = Router();
 
@@ -324,11 +325,22 @@ async function getSortedEntries(): Promise<EnhancedEntry[] | null> {
 // Filter entries based on query parameters
 function applyFilters(
   entries: EnhancedEntry[],
-  filters: { region?: string; language?: string; videoMode?: string; search?: string }
+  filters: {
+    region?: string;
+    language?: string;
+    videoMode?: string;
+    search?: string;
+    ownedIds?: Set<string>;
+  }
 ): EnhancedEntry[] {
   return entries.filter(entry => {
     // If any metadata filter is set, we only show entries that have metadata
     const hasMetadataFilters = filters.region || filters.language || filters.videoMode;
+
+    // Owned filter - only show owned cartridges
+    if (filters.ownedIds) {
+      if (!filters.ownedIds.has(entry.cartId.toLowerCase())) return false;
+    }
 
     // Search filter - matches name or cart ID
     if (filters.search) {
@@ -520,6 +532,7 @@ router.get('/page/:page', async (req, res) => {
     const language = req.query.language as string | undefined;
     const videoMode = req.query.videoMode as string | undefined;
     const search = req.query.search as string | undefined;
+    const owned = req.query.owned === 'true';
 
     const sortedEntries = await getSortedEntries();
 
@@ -530,8 +543,15 @@ router.get('/page/:page', async (req, res) => {
       });
     }
 
+    // Get owned IDs if filtering by owned
+    let ownedIds: Set<string> | undefined;
+    if (owned) {
+      const ids = await getOwnedCartIds();
+      ownedIds = new Set(ids.map(id => id.toLowerCase()));
+    }
+
     // Apply filters if any are set
-    const filteredEntries = applyFilters(sortedEntries, { region, language, videoMode, search });
+    const filteredEntries = applyFilters(sortedEntries, { region, language, videoMode, search, ownedIds });
 
     const totalEntries = filteredEntries.length;
     const totalPages = Math.ceil(totalEntries / pageSize);
@@ -546,7 +566,7 @@ router.get('/page/:page', async (req, res) => {
       totalPages,
       totalEntries,
       totalUnfiltered: sortedEntries.length,
-      filters: { region, language, videoMode },
+      filters: { region, language, videoMode, owned },
       entries,
     });
   } catch (error) {

@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { LabelsImportModal } from './LabelsImportModal';
 import { AddCartridgeModal } from './AddCartridgeModal';
 import { ConfirmResetModal } from './ConfirmResetModal';
+import { ImportFromSDModal } from './ImportFromSDModal';
+import { ExportBundleModal } from './ExportBundleModal';
+import { ImportBundleModal } from './ImportBundleModal';
 
 interface LabelEntry {
   cartId: string;
@@ -47,7 +50,7 @@ interface LabelsBrowserProps {
   sdCardPath?: string;
 }
 
-export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps) {
+export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsBrowserProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const hasLoadedRef = useRef(false);
   const [imageCacheBuster, setImageCacheBuster] = useState(0);
@@ -67,14 +70,22 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
   const [regionFilter, setRegionFilter] = useState<string>(searchParams.get('region') || '');
   const [languageFilter, setLanguageFilter] = useState<string>(searchParams.get('language') || '');
   const [videoModeFilter, setVideoModeFilter] = useState<string>(searchParams.get('videoMode') || '');
+  const [ownedFilter, setOwnedFilter] = useState<boolean>(searchParams.get('owned') === 'true');
 
   // Modal states
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showImportFromSDModal, setShowImportFromSDModal] = useState(false);
+  const [showExportBundleModal, setShowExportBundleModal] = useState(false);
+  const [showImportBundleModal, setShowImportBundleModal] = useState(false);
+
+  // Selection mode
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCartIds, setSelectedCartIds] = useState<Set<string>>(new Set());
 
   const pageSize = 48;
-  const hasActiveFilters = regionFilter || languageFilter || videoModeFilter || searchQuery;
+  const hasActiveFilters = regionFilter || languageFilter || videoModeFilter || searchQuery || ownedFilter;
 
   // Update URL when filters or page change
   const updateURL = useCallback((
@@ -84,6 +95,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       region?: string;
       language?: string;
       videoMode?: string;
+      owned?: boolean;
     }
   ) => {
     const params = new URLSearchParams();
@@ -92,6 +104,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     if (filters.region) params.set('region', filters.region);
     if (filters.language) params.set('language', filters.language);
     if (filters.videoMode) params.set('videoMode', filters.videoMode);
+    if (filters.owned) params.set('owned', 'true');
     setSearchParams(params);
   }, [setSearchParams]);
 
@@ -126,6 +139,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       language?: string;
       videoMode?: string;
       search?: string;
+      owned?: boolean;
     }
   ) => {
     try {
@@ -140,11 +154,13 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       const language = options?.language ?? languageFilter;
       const videoMode = options?.videoMode ?? videoModeFilter;
       const search = options?.search ?? searchQuery;
+      const owned = options?.owned ?? ownedFilter;
 
       if (region) params.set('region', region);
       if (language) params.set('language', language);
       if (videoMode) params.set('videoMode', videoMode);
       if (search) params.set('search', search);
+      if (owned) params.set('owned', 'true');
 
       const response = await fetch(`/api/labels/page/${pageNum}?${params}`);
       if (!response.ok) throw new Error('Failed to fetch labels');
@@ -169,30 +185,11 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     } finally {
       setLoading(false);
     }
-  }, [regionFilter, languageFilter, videoModeFilter, searchQuery]);
+  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, ownedFilter]);
 
   const handleRefresh = async () => {
     await fetchStatus();
     await fetchPage(0);
-  };
-
-  const handleExport = async () => {
-    try {
-      const response = await fetch('/api/labels/export');
-      if (!response.ok) throw new Error('Export failed');
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'labels.db';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
-    }
   };
 
   const handleResetComplete = async () => {
@@ -208,30 +205,33 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     setLanguageFilter('');
     setVideoModeFilter('');
     setSearchQuery('');
+    setOwnedFilter(false);
     updateURL(0, {});
   };
 
   const handlePageChange = (newPage: number) => {
-    updateURL(newPage, { search: searchQuery, region: regionFilter, language: languageFilter, videoMode: videoModeFilter });
+    updateURL(newPage, { search: searchQuery, region: regionFilter, language: languageFilter, videoMode: videoModeFilter, owned: ownedFilter });
     fetchPage(newPage);
   };
 
   const handleFilterChange = (
-    type: 'search' | 'region' | 'language' | 'videoMode',
-    value: string
+    type: 'search' | 'region' | 'language' | 'videoMode' | 'owned',
+    value: string | boolean
   ) => {
     // When filters change, always go back to page 1
     const newFilters = {
-      search: type === 'search' ? value : searchQuery,
-      region: type === 'region' ? value : regionFilter,
-      language: type === 'language' ? value : languageFilter,
-      videoMode: type === 'videoMode' ? value : videoModeFilter,
+      search: type === 'search' ? value as string : searchQuery,
+      region: type === 'region' ? value as string : regionFilter,
+      language: type === 'language' ? value as string : languageFilter,
+      videoMode: type === 'videoMode' ? value as string : videoModeFilter,
+      owned: type === 'owned' ? value as boolean : ownedFilter,
     };
 
-    if (type === 'search') setSearchQuery(value);
-    if (type === 'region') setRegionFilter(value);
-    if (type === 'language') setLanguageFilter(value);
-    if (type === 'videoMode') setVideoModeFilter(value);
+    if (type === 'search') setSearchQuery(value as string);
+    if (type === 'region') setRegionFilter(value as string);
+    if (type === 'language') setLanguageFilter(value as string);
+    if (type === 'videoMode') setVideoModeFilter(value as string);
+    if (type === 'owned') setOwnedFilter(value as boolean);
 
     updateURL(0, newFilters);
   };
@@ -288,7 +288,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, status?.imported]);
+  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, ownedFilter, status?.imported]);
 
   // Refetch when refreshKey changes (after delete/update)
   useEffect(() => {
@@ -301,10 +301,10 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
   return (
     <div className="labels-browser">
       <div className="labels-header">
-        <h2>Labels Database</h2>
+        <h2>Cartridges</h2>
         {status?.imported && (
           <span className="label-count">
-            {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status.entryCount)} labels
+            {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status.entryCount)} cartridges
           </span>
         )}
       </div>
@@ -326,18 +326,46 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
             Add Cartridge
           </button>
 
-          {status?.imported && (
+          {sdCardPath && (
             <button
               className="btn-secondary"
-              onClick={handleExport}
+              onClick={() => setShowImportFromSDModal(true)}
             >
-              Export
+              Import from SD
             </button>
+          )}
+
+          {status?.imported && (
+            <>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowExportBundleModal(true)}
+              >
+                Export Bundle
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowImportBundleModal(true)}
+              >
+                Import Bundle
+              </button>
+            </>
           )}
         </div>
 
         {status?.imported && (
           <div className="action-bar-right">
+            <div className="selection-mode-toggle">
+              <button
+                className={`btn-ghost ${selectionMode ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectionMode(!selectionMode);
+                  setSelectedCartIds(new Set());
+                }}
+              >
+                {selectionMode ? 'Exit Select' : 'Select'}
+              </button>
+            </div>
             <button
               className="btn-ghost btn-danger-text"
               onClick={() => setShowResetModal(true)}
@@ -353,7 +381,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       {!status?.imported ? (
         <div className="labels-empty">
           <div className="empty-icon">🎮</div>
-          <h3>No Labels Yet</h3>
+          <h3>No Cartridges Yet</h3>
           <p>Import an existing labels.db file to get started quickly, or build your collection by adding cartridges one at a time.</p>
           <div className="empty-actions">
             <button className="btn-primary" onClick={() => setShowImportModal(true)}>
@@ -368,6 +396,23 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
         <>
           {/* Search and Filters */}
           <div className="labels-filters">
+            <div className="filter-group filter-group-toggle">
+              <div className="toggle-buttons">
+                <button
+                  className={`toggle-btn ${!ownedFilter ? 'active' : ''}`}
+                  onClick={() => handleFilterChange('owned', false)}
+                >
+                  All
+                </button>
+                <button
+                  className={`toggle-btn ${ownedFilter ? 'active' : ''}`}
+                  onClick={() => handleFilterChange('owned', true)}
+                >
+                  Owned
+                </button>
+              </div>
+            </div>
+
             <div className="filter-group filter-group-search">
               <label htmlFor="search-input">Search</label>
               <div className="search-input-wrapper">
@@ -450,6 +495,55 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
             </div>
           </div>
 
+          {/* Selection Toolbar */}
+          {selectionMode && (
+            <div className="selection-toolbar">
+              <div className="selection-info">
+                <span className="selection-count">
+                  {selectedCartIds.size} selected
+                </span>
+                <button
+                  onClick={() => setSelectedCartIds(new Set(entries.map(e => e.cartId)))}
+                >
+                  Select Page
+                </button>
+                <button onClick={() => setSelectedCartIds(new Set())}>
+                  Clear
+                </button>
+              </div>
+              <div className="selection-actions">
+                <button
+                  disabled={selectedCartIds.size === 0}
+                  onClick={async () => {
+                    // Mark selected as owned
+                    for (const cartId of selectedCartIds) {
+                      await fetch(`/api/cartridges/owned/${cartId}`, { method: 'POST' });
+                    }
+                    setSelectedCartIds(new Set());
+                    setSelectionMode(false);
+                  }}
+                >
+                  Mark Owned
+                </button>
+                <button
+                  disabled={selectedCartIds.size === 0}
+                  onClick={() => setShowExportBundleModal(true)}
+                >
+                  Export Selection
+                </button>
+                <button
+                  className="btn-exit"
+                  onClick={() => {
+                    setSelectionMode(false);
+                    setSelectedCartIds(new Set());
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="loading">Loading...</div>
           ) : (
@@ -458,10 +552,25 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
                 {entries.map((entry, index) => (
                   <div
                     key={entry.cartId}
-                    className={`label-tile ${entry.name ? 'has-name' : ''}`}
+                    className={`label-tile ${entry.name ? 'has-name' : ''} ${selectionMode ? 'selectable' : ''} ${selectedCartIds.has(entry.cartId) ? 'selected' : ''}`}
                     style={{ '--tile-index': index } as React.CSSProperties}
-                    onClick={() => onSelectLabel(entry.cartId, entry.name)}
+                    onClick={() => {
+                      if (selectionMode) {
+                        const newSelection = new Set(selectedCartIds);
+                        if (newSelection.has(entry.cartId)) {
+                          newSelection.delete(entry.cartId);
+                        } else {
+                          newSelection.add(entry.cartId);
+                        }
+                        setSelectedCartIds(newSelection);
+                      } else {
+                        onSelectLabel(entry.cartId, entry.name);
+                      }
+                    }}
                   >
+                    {selectionMode && (
+                      <div className="selection-checkbox" />
+                    )}
                     <div className="cart-sprite">
                       <img
                         className="cart-artwork"
@@ -541,6 +650,33 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
         onClose={() => setShowResetModal(false)}
         onConfirm={handleResetComplete}
         entryCount={status?.entryCount}
+      />
+
+      {sdCardPath && (
+        <ImportFromSDModal
+          isOpen={showImportFromSDModal}
+          onClose={() => setShowImportFromSDModal(false)}
+          onImportComplete={handleRefresh}
+          sdCardPath={sdCardPath}
+        />
+      )}
+
+      <ExportBundleModal
+        isOpen={showExportBundleModal}
+        onClose={() => {
+          setShowExportBundleModal(false);
+          if (selectionMode) {
+            setSelectionMode(false);
+            setSelectedCartIds(new Set());
+          }
+        }}
+        selectedCartIds={selectionMode && selectedCartIds.size > 0 ? Array.from(selectedCartIds) : undefined}
+      />
+
+      <ImportBundleModal
+        isOpen={showImportBundleModal}
+        onClose={() => setShowImportBundleModal(false)}
+        onImportComplete={handleRefresh}
       />
     </div>
   );

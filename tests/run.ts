@@ -12,6 +12,7 @@
 import { runSuite, printSummary, TestResult } from './utils.js';
 import { labelsDbSuite, cleanOutput as cleanLabelsOutput, writeTestArtifacts } from './labels-db/tests.js';
 import { fileTransferSuite, cleanOutput as cleanFileTransferOutput } from './file-transfer/tests.js';
+import { cartridgeDataSuite, cleanOutput as cleanCartridgeOutput } from './cartridge-data/tests.js';
 
 const verbose = process.argv.includes('--verbose');
 
@@ -37,6 +38,14 @@ async function main() {
   await cleanFileTransferOutput();
   const fileTransferResults = await runSuite(fileTransferSuite);
   allResults.push(...fileTransferResults);
+
+  // Cartridge Data Tests
+  console.log(`\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510`);
+  console.log(`\u2502  ${cartridgeDataSuite.name} (${cartridgeDataSuite.tests.length} tests)`);
+  console.log(`\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518`);
+  await cleanCartridgeOutput();
+  const cartridgeDataResults = await runSuite(cartridgeDataSuite);
+  allResults.push(...cartridgeDataResults);
 
   // Print summary
   printSummary(allResults);

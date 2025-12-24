@@ -12,6 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "fast-xml-parser": "^5.3.3",
@@ -23,6 +25,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/adm-zip": "^0.5.7",
+    "@types/archiver": "^7.0.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.2",
     "@types/multer": "^1.4.12",

@@ -1,0 +1,178 @@
+/* Analogue 3D OS Control Components */
+
+/* Shared control row layout */
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+.control-label {
+  font-family: var(--font-pixel);
+  font-size: 32px;
+  color: var(--color-text);
+  text-align: left;
+  line-height: 1;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+/* ============================
+   Option Selector (Left/Right)
+   ============================ */
+
+.option-selector {
+  display: flex;
+  align-items: center;
+  width: 240px;
+  flex-shrink: 0;
+}
+
+.option-value {
+  font-family: var(--font-pixel);
+  font-size: 32px;
+  color: var(--color-text);
+  text-align: center;
+  flex: 1;
+  line-height: 1;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arrow-btn {
+  background: transparent;
+  border: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease;
+  color: var(--color-text);
+}
+
+.arrow-btn:hover:not(.disabled) {
+  opacity: 1;
+}
+
+.arrow-btn.disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.arrow-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+}
+
+/* ============================
+   Toggle Switch
+   ============================ */
+
+.toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-text {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #ffffff;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-switch.off {
+  background: #000000;
+  border-color: #ffffff;
+}
+
+.toggle-switch.on {
+  background: #00c500;
+  border-color: #00c500;
+}
+
+.toggle-thumb {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-switch.off .toggle-thumb {
+  left: 3px;
+}
+
+.toggle-switch.on .toggle-thumb {
+  left: calc(100% - 21px);
+}
+
+.toggle-thumb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00c500;
+}
+
+/* ============================
+   Settings Section Container
+   ============================ */
+
+.controls-test-page .settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 32px;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
+  padding: 0;
+}
+
+.controls-test-page .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section-header {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin: 0 0 8px 0;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
