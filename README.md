@@ -101,8 +101,8 @@ We've done the heavy lifting so you don't have to:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/analogue-3d-cart-art.git
-cd analogue-3d-cart-art
+git clone git@github.com:TheLeggett/A3D-Manager.git
+cd A3D-Manager
 
 # Install dependencies
 npm install
