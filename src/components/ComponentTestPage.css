@@ -107,6 +107,23 @@
   color: var(--color-bg);
 }
 
+/* Progress Demos */
+.progress-demos {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.progress-demo {
+  padding: 1rem;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+}
+
+.progress-demo h3 {
+  margin-bottom: 0.75rem;
+}
+
 /* Debug Section */
 .test-section.debug-section .debug-output {
   font-family: var(--font-mono);

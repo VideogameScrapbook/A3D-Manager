@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { OptionSelector, ToggleSwitch } from './controls';
 import { CartridgeSprite } from './CartridgeSprite';
 import type { CartridgeSpriteColor, CartridgeSpriteSize } from './CartridgeSprite';
+import { ProgressBar } from './ProgressBar';
 import './ComponentTestPage.css';
 
 export function ComponentTestPage() {
@@ -15,6 +16,51 @@ export function ComponentTestPage() {
   const [deBlur, setDeBlur] = useState(true);
   const [disableTextureFiltering, setDisableTextureFiltering] = useState(false);
   const [disableAntialiasing, setDisableAntialiasing] = useState(false);
+
+  // Simulated upload state
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadBytes, setUploadBytes] = useState(0);
+  const uploadIntervalRef = useRef<number | null>(null);
+  const totalBytes = 22 * 1024 * 1024; // 22 MB
+
+  useEffect(() => {
+    // Simulate file upload progress
+    uploadIntervalRef.current = window.setInterval(() => {
+      setUploadBytes((prev) => {
+        const speed = 500000 + Math.random() * 300000; // 500-800 KB/s
+        const newBytes = Math.min(prev + speed / 10, totalBytes);
+        setUploadProgress(Math.round((newBytes / totalBytes) * 100));
+        // Reset when complete
+        if (newBytes >= totalBytes) {
+          return 0;
+        }
+        return newBytes;
+      });
+    }, 100);
+
+    return () => {
+      if (uploadIntervalRef.current) {
+        clearInterval(uploadIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getUploadSpeed = () => {
+    const baseSpeed = 500 + Math.random() * 300;
+    return `${baseSpeed.toFixed(1)} KB/s`;
+  };
+
+  const getEta = () => {
+    const remaining = totalBytes - uploadBytes;
+    const speed = 600 * 1024; // ~600 KB/s average
+    const seconds = remaining / speed;
+    return `${seconds.toFixed(1)}s`;
+  };
 
   const displayModeOptions = ['CRT', 'BVM', 'LCD', 'OLED'];
   const colorProfileOptions = ['Standard', 'Professional', 'Vivid', 'Natural'];
@@ -32,6 +78,7 @@ export function ComponentTestPage() {
     { class: 'text-pixel-large', sample: 'N64-ZELDA' },
     { class: 'text-mono', sample: 'const value = 0x1234ABCD;' },
     { class: 'text-mono-small', sample: 'const value = 0x1234ABCD;' },
+    { class: 'text-code', sample: 'labels.db' },
     { class: 'text-caption', sample: 'Last modified: Dec 24, 2025' },
   ];
 
@@ -157,6 +204,53 @@ export function ComponentTestPage() {
           checked={disableAntialiasing}
           onChange={setDisableAntialiasing}
         />
+      </section>
+
+      {/* Progress Bar Section */}
+      <section className="test-section">
+        <h2 className="test-section-header text-section-header">Progress Bars</h2>
+
+        <div className="progress-demos">
+          <div className="progress-demo">
+            <h3 className="text-label">Indeterminate (no progress value)</h3>
+            <ProgressBar />
+          </div>
+
+          <div className="progress-demo">
+            <h3 className="text-label">Simple progress (45%)</h3>
+            <ProgressBar progress={45} />
+          </div>
+
+          <div className="progress-demo">
+            <h3 className="text-label">With percentage display</h3>
+            <ProgressBar progress={67} showPercentage />
+          </div>
+
+          <div className="progress-demo">
+            <h3 className="text-label">With percentage and label</h3>
+            <ProgressBar progress={33} showPercentage label="labels.db" />
+          </div>
+
+          <div className="progress-demo">
+            <h3 className="text-label">Simulated file upload (live)</h3>
+            <ProgressBar
+              progress={uploadProgress}
+              showPercentage
+              label="labels.db"
+              transferDetails={{
+                bytesWritten: formatBytes(uploadBytes),
+                totalBytes: formatBytes(totalBytes),
+                speed: getUploadSpeed(),
+                eta: getEta(),
+              }}
+            />
+          </div>
+
+          <div className="progress-demo">
+            <h3 className="text-label">Complete (100%)</h3>
+            <ProgressBar progress={100} showPercentage label="Done!" />
+          </div>
+        </div>
       </section>
 
       {/* Current State Debug */}

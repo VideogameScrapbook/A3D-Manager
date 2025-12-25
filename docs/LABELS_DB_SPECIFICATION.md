@@ -340,6 +340,54 @@ Image Slot Structure (25,600 bytes each):
 
 ---
 
+## SD Card Transfer Performance
+
+When writing `labels.db` to an SD card, transfer performance varies significantly based on chunk size and sync behavior. A3D Manager includes a **Chunk Size Benchmark** on the Settings page to test your specific SD card.
+
+### Benchmark Results
+
+Testing on a typical SD card showed:
+
+| Configuration | Avg Speed | Duration (22MB) |
+|--------------|-----------|-----------------|
+| 4MB (no fsync) | ~822 KB/s | ~27s |
+| 256KB (no fsync) | ~806 KB/s | ~28s |
+| 2MB + fsync | ~784 KB/s | ~29s |
+| 1MB + fsync | ~752 KB/s | ~30s |
+| 256KB + fsync | ~620 KB/s | ~36s |
+| 64KB + fsync | ~360 KB/s | ~63s |
+
+**Key findings:**
+- **Larger chunks are faster**: 4MB chunks outperform 64KB by ~2.3x
+- **fsync per chunk is slower**: Syncing after each write adds significant overhead
+- **No fsync mode**: Buffers writes and syncs once at the end (fastest, but progress bar may jump)
+
+### Configuration
+
+Transfer settings can be configured via environment variables in `.env`:
+
+```bash
+# Chunk size in bytes (default: 2097152 = 2MB)
+TRANSFER_CHUNK_SIZE=2097152
+
+# Whether to fsync after each chunk (default: true)
+# true = accurate progress bar (recommended)
+# false = ~5% faster but progress won't reflect actual disk writes
+TRANSFER_FSYNC_PER_CHUNK=true
+```
+
+### Trade-offs
+
+| Setting | Pros | Cons |
+|---------|------|------|
+| Large chunks + fsync | Fast with accurate progress | Slightly slower than no-fsync |
+| Large chunks + no fsync | Absolute fastest | Progress bar jumps to 100% immediately |
+| Small chunks + fsync | Most granular progress | Significantly slower |
+
+**Recommendation**: Use the defaults (2MB + fsync) for the best balance of speed and accurate progress tracking. Only set `TRANSFER_FSYNC_PER_CHUNK=false` if you don't need real-time progress feedback.
+
+---
+
 ## Validation
 
 This specification is validated by a comprehensive test suite. See [TESTING.md](./TESTING.md) for details on running the tests.

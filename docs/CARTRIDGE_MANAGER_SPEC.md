@@ -395,52 +395,52 @@ archive.a3d (ZIP)
 ## Implementation Phases
 
 ### Phase 1: Data Foundation
-- [ ] Create `owned-carts.ts` library
-- [ ] Create `cartridge-settings.ts` library
-- [ ] Create `game-pak.ts` library
-- [ ] Add ownership API routes
+- [x] Create `owned-carts.ts` library
+- [x] Create `cartridge-settings.ts` library
+- [x] Create `game-pak.ts` library
+- [x] Add ownership API routes
 - [ ] Add tests for ownership tracking
 
 ### Phase 2: Ownership UI
-- [ ] Add "Owned" filter toggle to browser
-- [ ] Add "Import from SD Card" modal
-- [ ] Add ownership toggle in detail view
-- [ ] Progress bar for SD card import
+- [x] Add "Owned" filter toggle to browser
+- [x] Add "Import from SD Card" modal
+- [x] Add ownership toggle in detail view
+- [x] Progress bar for SD card import
 
 ### Phase 3: Route & Panel
-- [ ] Rename `/labels` to `/cartridges`
-- [ ] Create `CartridgeDetailPanel` component
-- [ ] Migrate Label tab from `LabelEditor`
-- [ ] Add slide-over animation
+- [x] Rename `/labels` to `/cartridges`
+- [x] Create `CartridgeDetailPanel` component
+- [x] Migrate Label tab from `LabelEditor`
+- [x] Add slide-over animation
 
 ### Phase 4: Settings Management
-- [ ] Settings API routes
-- [ ] Settings tab UI (read-only)
-- [ ] Settings editor form
+- [x] Settings API routes
+- [x] Settings tab UI (read-only)
+- [x] Settings editor form
 - [ ] Import/export settings
 
 ### Phase 5: Game Pak Management
-- [ ] Game pak API routes
-- [ ] Game pak tab UI
+- [x] Game pak API routes
+- [x] Game pak tab UI
 - [ ] Import/export game paks
-- [ ] Destructive action warnings
+- [x] Destructive action warnings
 
 ### Phase 6: Selection Mode
-- [ ] Selection state management
-- [ ] Selection mode toggle
-- [ ] Bulk selection actions
-- [ ] Visual selection indicators
+- [x] Selection state management
+- [x] Selection mode toggle
+- [x] Bulk selection actions
+- [x] Visual selection indicators
 
 ### Phase 7: Export System
-- [ ] Archive creation library
-- [ ] Export modal UI
-- [ ] ZIP file generation
+- [x] Archive creation library
+- [x] Export modal UI
+- [x] ZIP file generation
 
 ### Phase 8: Import System
-- [ ] Archive parsing library
-- [ ] Import preview modal
-- [ ] Import apply with merge strategies
-- [ ] Progress tracking
+- [x] Archive parsing library
+- [x] Import preview modal
+- [x] Import apply with merge strategies
+- [x] Progress tracking
 
 ---
 

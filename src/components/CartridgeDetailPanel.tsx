@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useImageCache } from '../App';
 import { IconButton, OptionSelector, ToggleSwitch } from './controls';
 import { CartridgeSprite } from './CartridgeSprite';
+import { ConnectionIndicator } from './ConnectionIndicator';
 import './CartridgeDetailPanel.css';
 
 interface CartridgeDetailPanelProps {
@@ -871,19 +872,15 @@ function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
   return (
     <div className="tab-content settings-tab">
       {/* Connection Status Banner */}
-      {isConnected ? (
-        <div className="connection-status connected">
-          <span className="status-dot"></span>
-          <span className="status-text">SD Card Connected</span>
-          <span className="status-note">Changes will sync to both local and SD card</span>
-        </div>
-      ) : (
-        <div className="connection-status disconnected">
-          <span className="status-dot"></span>
-          <span className="status-text">SD Card Not Connected</span>
-          <span className="status-note">Changes will only save locally</span>
-        </div>
-      )}
+      <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+        <ConnectionIndicator connected={isConnected} />
+        <span className="status-text">
+          {isConnected ? 'SD Card Connected' : 'SD Card Not Connected'}
+        </span>
+        <span className="status-note">
+          {isConnected ? 'Changes will sync to both local and SD card' : 'Changes will only save locally'}
+        </span>
+      </div>
 
       {error && <div className="error-message">{error}</div>}
 

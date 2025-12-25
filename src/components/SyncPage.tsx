@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSDCard } from '../App';
+import { ProgressBar } from './ProgressBar';
 
 interface SyncPreview {
   labels: {
@@ -314,42 +315,17 @@ export function SyncPage() {
         </div>
       ) : step === 'syncing' ? (
         <div className="sync-progress">
-          <div className="progress-bar">
-            <div
-              className={`progress-fill ${progress.percentage === 0 && !progress.bytesWritten ? 'indeterminate' : ''}`}
-              style={progress.percentage > 0 ? { width: `${progress.percentage}%` } : undefined}
-            />
-          </div>
-
-          {/* Percentage and file name */}
-          <div className="progress-header">
-            <span className="progress-percent text-pixel text-accent">{progress.percentage}%</span>
-            {progress.fileName && (
-              <span className="progress-filename text-mono-small text-muted">{progress.fileName}</span>
-            )}
-          </div>
-
-          {/* Transfer details */}
-          {progress.bytesWritten && (
-            <div className="progress-details">
-              <span className="progress-bytes text-mono-small">
-                {progress.bytesWritten} / {progress.totalBytes}
-              </span>
-              {progress.speed && (
-                <>
-                  <span className="progress-separator">•</span>
-                  <span className="progress-speed text-mono-small text-accent">{progress.speed}</span>
-                </>
-              )}
-              {progress.eta && progress.eta !== '0ms' && (
-                <>
-                  <span className="progress-separator">•</span>
-                  <span className="progress-eta">~{progress.eta} remaining</span>
-                </>
-              )}
-            </div>
-          )}
-
+          <ProgressBar
+            progress={progress.percentage === 0 && !progress.bytesWritten ? undefined : progress.percentage}
+            showPercentage
+            label={progress.fileName || undefined}
+            transferDetails={progress.bytesWritten ? {
+              bytesWritten: progress.bytesWritten,
+              totalBytes: progress.totalBytes,
+              speed: progress.speed || undefined,
+              eta: progress.eta || undefined,
+            } : undefined}
+          />
           <p className="progress-status">{progress.status}</p>
         </div>
       ) : step === 'complete' && results ? (

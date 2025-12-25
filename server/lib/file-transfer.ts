@@ -128,9 +128,31 @@ export class ProgressStream extends Transform {
 // File Operations
 // =============================================================================
 
+// Default transfer settings based on chunk benchmark results
+// 2MB chunks with fsync is the fastest option that allows accurate progress tracking
+// (~784 KB/s vs ~360 KB/s for 64KB + fsync, only ~5% slower than 4MB no-fsync)
+const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+const DEFAULT_FSYNC_PER_CHUNK = true;
+
+/**
+ * Get transfer settings from environment or use defaults
+ */
+function getTransferSettings(): { chunkSize: number; fsyncPerChunk: boolean } {
+  const chunkSize = process.env.TRANSFER_CHUNK_SIZE
+    ? parseInt(process.env.TRANSFER_CHUNK_SIZE, 10)
+    : DEFAULT_CHUNK_SIZE;
+
+  const fsyncPerChunk = process.env.TRANSFER_FSYNC_PER_CHUNK
+    ? process.env.TRANSFER_FSYNC_PER_CHUNK === 'true'
+    : DEFAULT_FSYNC_PER_CHUNK;
+
+  return { chunkSize, fsyncPerChunk };
+}
+
 /**
  * Copy a file with progress reporting.
- * Uses chunked writes with fsync to ensure accurate progress on slow devices like SD cards.
+ * Settings configurable via TRANSFER_CHUNK_SIZE and TRANSFER_FSYNC_PER_CHUNK env vars.
+ * Defaults: 4MB chunks, no fsync per chunk (based on benchmark results).
  *
  * @param sourcePath - Path to source file
  * @param destPath - Path to destination file
@@ -152,9 +174,8 @@ export async function copyFileWithProgress(
   const destDir = path.dirname(destPath);
   await mkdirAsync(destDir, { recursive: true });
 
-  // Use chunked writes with fsync for accurate SD card progress
-  // 256KB chunks balance progress granularity with performance
-  const CHUNK_SIZE = 256 * 1024;
+  // Get settings from environment or use defaults
+  const { chunkSize, fsyncPerChunk } = getTransferSettings();
 
   const sourceHandle = await open(sourcePath, 'r');
   const destHandle = await open(destPath, 'w');
@@ -162,20 +183,22 @@ export async function copyFileWithProgress(
   let bytesWritten = 0;
   const startTime = Date.now();
   let lastProgressTime = 0;
-  const buffer = Buffer.alloc(CHUNK_SIZE);
+  const buffer = Buffer.alloc(chunkSize);
 
   try {
     while (bytesWritten < totalBytes) {
       // Read chunk from source
-      const { bytesRead } = await sourceHandle.read(buffer, 0, CHUNK_SIZE, bytesWritten);
+      const { bytesRead } = await sourceHandle.read(buffer, 0, chunkSize, bytesWritten);
       if (bytesRead === 0) break;
 
       // Write chunk to destination
-      const chunk = bytesRead < CHUNK_SIZE ? buffer.subarray(0, bytesRead) : buffer;
+      const chunk = bytesRead < chunkSize ? buffer.subarray(0, bytesRead) : buffer;
       await destHandle.write(chunk, 0, bytesRead, bytesWritten);
 
-      // Sync to disk - this is what makes progress accurate on SD cards
-      await destHandle.sync();
+      // Optionally sync to disk after each chunk (accurate progress but slower)
+      if (fsyncPerChunk) {
+        await destHandle.sync();
+      }
 
       bytesWritten += bytesRead;
 
@@ -199,6 +222,11 @@ export async function copyFileWithProgress(
           estimatedTimeRemainingMs,
         });
       }
+    }
+
+    // Final sync if not syncing per chunk
+    if (!fsyncPerChunk) {
+      await destHandle.sync();
     }
   } finally {
     await sourceHandle.close();
@@ -361,4 +389,102 @@ export function createProgressBar(percentage: number, width: number = 40): strin
   const filled = Math.round((percentage / 100) * width);
   const empty = width - filled;
   return `[${'█'.repeat(filled)}${'░'.repeat(empty)}]`;
+}
+
+/**
+ * Options for benchmarking file copy with different settings
+ */
+export interface CopyBenchmarkOptions {
+  /** Chunk size in bytes */
+  chunkSize: number;
+  /** Whether to fsync after each chunk (accurate progress on SD cards but slower) */
+  fsyncPerChunk: boolean;
+  /** Progress callback */
+  onProgress?: ProgressCallback;
+  /** Progress throttle in ms */
+  throttleMs?: number;
+}
+
+/**
+ * Copy a file with configurable chunk size and sync behavior.
+ * Used for benchmarking different settings.
+ */
+export async function copyFileWithSettings(
+  sourcePath: string,
+  destPath: string,
+  options: CopyBenchmarkOptions
+): Promise<{ durationMs: number; bytesWritten: number; avgSpeed: number }> {
+  const { open: openFile, mkdir: mkdirAsync } = await import('fs/promises');
+
+  const stats = statSync(sourcePath);
+  const totalBytes = stats.size;
+
+  // Ensure destination directory exists
+  const destDir = path.dirname(destPath);
+  await mkdirAsync(destDir, { recursive: true });
+
+  const { chunkSize, fsyncPerChunk, onProgress, throttleMs = 100 } = options;
+
+  const sourceHandle = await openFile(sourcePath, 'r');
+  const destHandle = await openFile(destPath, 'w');
+
+  let bytesWritten = 0;
+  const startTime = Date.now();
+  let lastProgressTime = 0;
+  const buffer = Buffer.alloc(chunkSize);
+
+  try {
+    while (bytesWritten < totalBytes) {
+      // Read chunk from source
+      const { bytesRead } = await sourceHandle.read(buffer, 0, chunkSize, bytesWritten);
+      if (bytesRead === 0) break;
+
+      // Write chunk to destination
+      const chunk = bytesRead < chunkSize ? buffer.subarray(0, bytesRead) : buffer;
+      await destHandle.write(chunk, 0, bytesRead, bytesWritten);
+
+      // Optionally sync to disk
+      if (fsyncPerChunk) {
+        await destHandle.sync();
+      }
+
+      bytesWritten += bytesRead;
+
+      // Emit progress (throttled)
+      if (onProgress) {
+        const now = Date.now();
+        if (now - lastProgressTime >= throttleMs || bytesWritten >= totalBytes) {
+          lastProgressTime = now;
+          const elapsedMs = now - startTime;
+          const bytesPerSecond = elapsedMs > 0 ? (bytesWritten / elapsedMs) * 1000 : 0;
+          const remainingBytes = totalBytes - bytesWritten;
+          const estimatedTimeRemainingMs = bytesPerSecond > 0
+            ? (remainingBytes / bytesPerSecond) * 1000
+            : 0;
+
+          onProgress({
+            bytesWritten,
+            totalBytes,
+            percentage: Math.min(100, (bytesWritten / totalBytes) * 100),
+            elapsedMs,
+            bytesPerSecond,
+            estimatedTimeRemainingMs,
+          });
+        }
+      }
+    }
+
+    // Final sync if not syncing per chunk
+    if (!fsyncPerChunk) {
+      await destHandle.sync();
+    }
+
+    const durationMs = Date.now() - startTime;
+    const avgSpeed = durationMs > 0 ? (bytesWritten / durationMs) * 1000 : 0;
+
+    return { durationMs, bytesWritten, avgSpeed };
+  } finally {
+    await sourceHandle.close();
+    await destHandle.close();
+  }
 }
