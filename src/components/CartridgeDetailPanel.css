@@ -51,39 +51,31 @@
 }
 
 .slide-over-title h2 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.25rem;
+  font-size: 16px;
   font-weight: 600;
   color: var(--color-text);
 }
 
-.cart-id-badge {
-  background: var(--color-surface);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  color: var(--color-muted);
+/* Slide-Over Tabs */
+.slide-over-tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 1.5rem;
+}
+
+.slide-over-tabs-left {
+  display: flex;
 }
 
 /* Ownership Toggle */
-.ownership-toggle {
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
 .ownership-toggle .control-row {
   justify-content: flex-end;
 }
 
 .ownership-toggle .control-label {
   display: none;
-}
-
-/* Slide-Over Tabs */
-.slide-over-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  padding: 0 1.5rem;
 }
 
 .tab-btn {
@@ -166,6 +158,14 @@
 
 .tab-content .label-comparison h4 {
   margin: 0 0 0.75rem 0;
+  text-align: center;
+}
+
+.tab-content .label-current,
+.tab-content .label-new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .tab-content .label-comparison .cartridge-sprite {

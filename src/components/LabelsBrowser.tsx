@@ -9,6 +9,7 @@ import { ConfirmResetModal } from './ConfirmResetModal';
 import { ImportFromSDModal } from './ImportFromSDModal';
 import { ExportBundleModal } from './ExportBundleModal';
 import { ImportBundleModal } from './ImportBundleModal';
+import { TooltipIcon } from './ui';
 import './LabelsBrowser.css';
 
 interface LabelEntry {
@@ -443,9 +444,11 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
               </button>
             )}
 
-            <div className="filter-info" title="Our game metadata is a work in progress and doesn't include every cartridge. When filters are active, only cartridges with known metadata will be shown.">
-              <span className="filter-info-icon">?</span>
-            </div>
+            <TooltipIcon
+              content="Our game metadata is a work in progress and doesn't include every cartridge. When filters are active, only cartridges with known metadata will be shown."
+              position="bottom"
+              className="filter-info"
+            />
           </div>
 
           {/* Selection Toolbar */}

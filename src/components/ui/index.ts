@@ -8,3 +8,4 @@ export {
   GhostButton,
   IconButton
 } from './Button';
+export { Tooltip, TooltipIcon } from './Tooltip';

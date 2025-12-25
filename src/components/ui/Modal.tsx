@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { IconButton } from '../controls';
 import './Modal.css';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -69,13 +70,9 @@ export function Modal({
       >
         <div className="modal-header">
           <h2 id="modal-title">{title}</h2>
-          <button
-            className="modal-close-btn"
-            onClick={onClose}
-            aria-label="Close modal"
-          >
+          <IconButton onClick={onClose} aria-label="Close modal">
             &times;
-          </button>
+          </IconButton>
         </div>
 
         <div className="modal-body">{children}</div>

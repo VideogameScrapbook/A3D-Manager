@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { OptionSelector, ToggleSwitch } from './controls';
+import { IconButton, OptionSelector, ToggleSwitch } from './controls';
 import { CartridgeSprite } from './CartridgeSprite';
 import './CartridgeDetailPanel.css';
 
@@ -209,44 +209,44 @@ export function CartridgeDetailPanel({
           />
           <div className="slide-over-title">
             <h2>{displayName}</h2>
-            <code className="cart-id-badge text-mono-small">{cartId}</code>
+            <code className="text-label text-accent">{cartId}</code>
           </div>
-          <button className="close-btn" onClick={onClose}>
+          <IconButton onClick={onClose} aria-label="Close panel">
             &times;
-          </button>
+          </IconButton>
         </div>
 
-        {/* Ownership Toggle */}
-        <div className="ownership-toggle">
-          <ToggleSwitch
-            label=""
-            checked={isOwned}
-            onChange={handleToggleOwned}
-            onText="OWNED"
-            offText="NOT OWNED"
-          />
-        </div>
-
-        {/* Tabs */}
+        {/* Tabs & Ownership Toggle */}
         <div className="slide-over-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'label' ? 'active' : ''}`}
-            onClick={() => setActiveTab('label')}
-          >
-            Label
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            Settings
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'gamepak' ? 'active' : ''}`}
-            onClick={() => setActiveTab('gamepak')}
-          >
-            Game Pak
-          </button>
+          <div className="slide-over-tabs-left">
+            <button
+              className={`tab-btn ${activeTab === 'label' ? 'active' : ''}`}
+              onClick={() => setActiveTab('label')}
+            >
+              Label
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              Settings
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'gamepak' ? 'active' : ''}`}
+              onClick={() => setActiveTab('gamepak')}
+            >
+              Game Pak
+            </button>
+          </div>
+          <div className="ownership-toggle">
+            <ToggleSwitch
+              label=""
+              checked={isOwned}
+              onChange={handleToggleOwned}
+              onText="OWNED"
+              offText="NOT OWNED"
+            />
+          </div>
         </div>
 
         <div className="slide-over-content">
@@ -471,20 +471,32 @@ function LabelTab({
         </label>
         {canEditName ? (
           <div className="name-editor">
-            <input
-              type="text"
-              value={editableName}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="Enter game name"
-            />
-            {nameChanged && (
-              <button
-                className="btn-primary btn-small"
-                onClick={handleSaveName}
-                disabled={savingName || !editableName.trim()}
-              >
-                {savingName ? 'Saving...' : 'Save'}
-              </button>
+            <div className="name-editor-row">
+              <input
+                type="text"
+                value={editableName}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Enter game name"
+              />
+              {nameChanged && (
+                <button
+                  className="btn-primary btn-small"
+                  onClick={handleSaveName}
+                  disabled={savingName || !editableName.trim()}
+                >
+                  {savingName ? 'Saving...' : 'Save'}
+                </button>
+              )}
+            </div>
+            {lookupResult?.source === 'user' && (
+              <span className="text-caption">
+                This cart ID isn't in our database. You can edit the name above.
+              </span>
+            )}
+            {isUnknownCart && (
+              <span className="text-caption">
+                This cart ID isn't in our database. Add a name above to identify it.
+              </span>
             )}
           </div>
         ) : (

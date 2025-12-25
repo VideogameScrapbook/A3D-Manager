@@ -170,3 +170,55 @@
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
 }
+
+/* ============================
+   Icon Button
+   ============================ */
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+/* Variants */
+.icon-button--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+}
+
+.icon-button--ghost:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.icon-button--subtle {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+}
+
+.icon-button--subtle:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+/* Sizes */
+.icon-button--sm {
+  width: 28px;
+  height: 28px;
+  font-size: 1.25rem;
+}
+
+.icon-button--md {
+  width: 32px;
+  height: 32px;
+  font-size: 1.5rem;
+}

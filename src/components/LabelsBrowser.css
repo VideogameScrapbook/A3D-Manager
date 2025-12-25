@@ -314,7 +314,7 @@
 
 .toggle-btn.active {
   background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  color: #000000;
 }
 
 .filter-clear-btn {
@@ -330,58 +330,9 @@
 
 /* Filter info tooltip */
 .filter-info {
-  position: relative;
   margin-left: auto;
   padding-left: 0.5rem;
   height: 36px;
-  display: flex;
-  align-items: center;
-}
-
-.filter-info-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  font-family: var(--font-body);
-  font-weight: 600;
-  background: var(--color-border);
-  color: var(--color-text-muted);
-  border-radius: 50%;
-  cursor: help;
-}
-
-.filter-info-icon:hover {
-  background: var(--color-text-muted);
-  color: var(--color-bg);
-}
-
-.filter-info::after {
-  content: attr(title);
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  width: 280px;
-  padding: 0.75rem;
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.2s, visibility 0.2s;
-  z-index: 100;
-  pointer-events: none;
-}
-
-.filter-info:hover::after {
-  opacity: 1;
-  visibility: visible;
 }
 
 .labels-grid {
@@ -419,8 +370,14 @@
 
 .name-editor {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.25rem;
   margin-bottom: 1rem;
+}
+
+.name-editor-row {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .name-editor input {
