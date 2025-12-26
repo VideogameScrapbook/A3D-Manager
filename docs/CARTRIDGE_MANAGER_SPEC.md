@@ -255,7 +255,7 @@ Replaces the modal. 400px panel slides in from the right when a cartridge is sel
 ```
 
 **Tabs:**
-1. **Label** - Artwork management (migrated from LabelEditor)
+1. **Label** - Artwork management
 2. **Settings** - View/edit hardware & display settings
 3. **Game Pak** - Controller pak data management
 
@@ -389,58 +389,6 @@ archive.a3d (ZIP)
   }
 }
 ```
-
----
-
-## Implementation Phases
-
-### Phase 1: Data Foundation
-- [x] Create `owned-carts.ts` library
-- [x] Create `cartridge-settings.ts` library
-- [x] Create `game-pak.ts` library
-- [x] Add ownership API routes
-- [ ] Add tests for ownership tracking
-
-### Phase 2: Ownership UI
-- [x] Add "Owned" filter toggle to browser
-- [x] Add "Import from SD Card" modal
-- [x] Add ownership toggle in detail view
-- [x] Progress bar for SD card import
-
-### Phase 3: Route & Panel
-- [x] Rename `/labels` to `/cartridges`
-- [x] Create `CartridgeDetailPanel` component
-- [x] Migrate Label tab from `LabelEditor`
-- [x] Add slide-over animation
-
-### Phase 4: Settings Management
-- [x] Settings API routes
-- [x] Settings tab UI (read-only)
-- [x] Settings editor form
-- [ ] Import/export settings
-
-### Phase 5: Game Pak Management
-- [x] Game pak API routes
-- [x] Game pak tab UI
-- [ ] Import/export game paks
-- [x] Destructive action warnings
-
-### Phase 6: Selection Mode
-- [x] Selection state management
-- [x] Selection mode toggle
-- [x] Bulk selection actions
-- [x] Visual selection indicators
-
-### Phase 7: Export System
-- [x] Archive creation library
-- [x] Export modal UI
-- [x] ZIP file generation
-
-### Phase 8: Import System
-- [x] Archive parsing library
-- [x] Import preview modal
-- [x] Import apply with merge strategies
-- [x] Progress tracking
 
 ---
 

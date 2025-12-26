@@ -134,6 +134,8 @@ export function DeleteLocalDataModal({ isOpen, onClose, onDeleted, dataType }: D
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder={confirmWord}
           autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
         />
       </div>
     </Modal>

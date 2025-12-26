@@ -70,15 +70,6 @@ Seamlessly sync your labels to your Analogue 3D:
 
 ![Sync Progress](src/assets/screenshots/Sync%20Progress.png)
 
-### Safe by Default
-
-Your SD card is never modified without your explicit approval:
-
-- All edits are stored locally first
-- Preview exactly what will change before syncing
-- Confirmation dialogs for destructive operations
-- Export and backup your database anytime
-
 ### Pre-Built Cart Database
 
 We've done the heavy lifting so you don't have to:

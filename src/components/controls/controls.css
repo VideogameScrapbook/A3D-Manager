@@ -141,6 +141,18 @@
   background: #00c500;
 }
 
+.toggle-switch.disabled {
+  cursor: default;
+}
+
+/* ============================
+   Disabled Control Row
+   ============================ */
+
+.control-row.disabled {
+  opacity: 0.4;
+}
+
 /* ============================
    Settings Section Container
    ============================ */

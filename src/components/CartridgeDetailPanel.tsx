@@ -4,6 +4,23 @@ import { IconButton, OptionSelector, ToggleSwitch } from './controls';
 import { CartridgeSprite } from './CartridgeSprite';
 import { ConnectionIndicator } from './ConnectionIndicator';
 import { useLabelSync } from './LabelSyncIndicator';
+import { queueSettingsSave, onSaveStatus } from '../lib/settingsAutoSave';
+import {
+  createDefaultSettings,
+  type BeamConvergence,
+  type ImageSize,
+  type ImageFit,
+  type Sharpness,
+  type Region,
+  type Overclock,
+  type DisplayMode,
+  type InterpolationAlg,
+  type GammaTransfer,
+  type CRTModeSettings,
+  type CleanModeSettings,
+  type DisplayCatalog,
+  type CartridgeSettings,
+} from '../lib/defaultSettings';
 import './CartridgeDetailPanel.css';
 
 interface CartridgeDetailPanelProps {
@@ -22,58 +39,6 @@ interface LookupResult {
   name?: string;
   region?: string;
   videoMode?: string;
-}
-
-// Settings types matching backend and settings.md
-type BeamConvergence = 'Off' | 'Consumer' | 'Professional';
-type ImageSize = 'Fill' | 'Integer' | 'Integer+';
-type ImageFit = 'Original' | 'Stretch' | 'Cinema Zoom';
-type Sharpness = 'Very Soft' | 'Soft' | 'Medium' | 'Sharp' | 'Very Sharp';
-type Region = 'Auto' | 'NTSC' | 'PAL';
-type Overclock = 'Auto' | 'Enhanced' | 'Enhanced+' | 'Unleashed';
-type DisplayMode = 'bvm' | 'pvm' | 'crt' | 'scanlines' | 'clean';
-type InterpolationAlg = 'BC Spline' | 'Bilinear' | 'Blackman Harris' | 'Lanczos2';
-type GammaTransfer = 'Tube' | 'Modern' | 'Professional';
-
-interface CRTModeSettings {
-  horizontalBeamConvergence: BeamConvergence;
-  verticalBeamConvergence: BeamConvergence;
-  enableEdgeOvershoot: boolean;
-  enableEdgeHardness: boolean;
-  imageSize: ImageSize;
-  imageFit: ImageFit;
-}
-
-interface CleanModeSettings {
-  interpolationAlg: InterpolationAlg;
-  gammaTransferFunction: GammaTransfer;
-  sharpness: Sharpness;
-  imageSize: ImageSize;
-  imageFit: ImageFit;
-}
-
-interface DisplayCatalog {
-  bvm: CRTModeSettings;
-  pvm: CRTModeSettings;
-  crt: CRTModeSettings;
-  scanlines: CRTModeSettings;
-  clean: CleanModeSettings;
-}
-
-interface DisplaySettings {
-  odm: DisplayMode;
-  catalog: DisplayCatalog;
-}
-
-interface HardwareSettings {
-  virtualExpansionPak: boolean;
-  region: Region;
-  disableDeblur: boolean;
-  enable32BitColor: boolean;
-  disableTextureFiltering: boolean;
-  disableAntialiasing: boolean;
-  forceOriginalHardware: boolean;
-  overclock: Overclock;
 }
 
 // Option arrays for controls
@@ -95,12 +60,6 @@ const REGION_OPTIONS: Region[] = ['Auto', 'NTSC', 'PAL'];
 const OVERCLOCK_OPTIONS: Overclock[] = ['Auto', 'Enhanced', 'Enhanced+', 'Unleashed'];
 const EDGE_HARDNESS_OPTIONS = ['Soft', 'Hard'];
 const BIT_COLOR_OPTIONS = ['Off', 'Auto'];
-
-interface CartridgeSettings {
-  title: string;
-  display: DisplaySettings;
-  hardware: HardwareSettings;
-}
 
 // API response types matching backend
 interface SettingsInfoItem {
@@ -266,6 +225,7 @@ export function CartridgeDetailPanel({
             <SettingsTab
               cartId={cartId}
               sdCardPath={sdCardPath}
+              gameName={displayName}
             />
           )}
         </div>
@@ -275,7 +235,7 @@ export function CartridgeDetailPanel({
 }
 
 // ============================================================================
-// Label Tab - moved from LabelEditor
+// Label Tab
 // ============================================================================
 
 interface LabelTabProps {
@@ -474,6 +434,10 @@ function LabelTab({
                 value={editableName}
                 onChange={(e) => handleNameChange(e.target.value)}
                 placeholder="Enter game name"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
               />
               {nameChanged && (
                 <button
@@ -587,6 +551,7 @@ function LabelTab({
 interface SettingsTabProps {
   cartId: string;
   sdCardPath?: string;
+  gameName?: string;
 }
 
 // Helper to compare settings objects (shallow comparison of key values)
@@ -596,51 +561,9 @@ function settingsAreDifferent(a: CartridgeSettings | undefined, b: CartridgeSett
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
-// Default settings factory
-function createDefaultSettings(title: string = 'Unknown Cartridge'): CartridgeSettings {
-  const defaultCRTSettings: CRTModeSettings = {
-    horizontalBeamConvergence: 'Professional',
-    verticalBeamConvergence: 'Professional',
-    enableEdgeOvershoot: false,
-    enableEdgeHardness: false,
-    imageSize: 'Fill',
-    imageFit: 'Original',
-  };
-
-  return {
-    title,
-    display: {
-      odm: 'crt',
-      catalog: {
-        bvm: { ...defaultCRTSettings },
-        pvm: { ...defaultCRTSettings, enableEdgeOvershoot: true },
-        crt: { ...defaultCRTSettings, enableEdgeOvershoot: true, horizontalBeamConvergence: 'Consumer', verticalBeamConvergence: 'Consumer' },
-        scanlines: { ...defaultCRTSettings, horizontalBeamConvergence: 'Off', verticalBeamConvergence: 'Off' },
-        clean: {
-          interpolationAlg: 'BC Spline',
-          gammaTransferFunction: 'Tube',
-          sharpness: 'Medium',
-          imageSize: 'Fill',
-          imageFit: 'Original',
-        },
-      },
-    },
-    hardware: {
-      virtualExpansionPak: true,
-      region: 'Auto',
-      disableDeblur: false,
-      enable32BitColor: true,
-      disableTextureFiltering: false,
-      disableAntialiasing: false,
-      forceOriginalHardware: false,
-      overclock: 'Auto',
-    },
-  };
-}
-
 type ConflictResolution = 'pending' | 'use-local' | 'use-sd' | 'resolved';
 
-function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
+function SettingsTab({ cartId, sdCardPath, gameName }: SettingsTabProps) {
   const [info, setInfo] = useState<SettingsInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -787,7 +710,7 @@ function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
     try {
       setError(null);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('settings', file);
       const response = await fetch(`/api/cartridges/${cartId}/settings/import`, {
         method: 'POST',
         body: formData,
@@ -824,7 +747,9 @@ function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${cartId}-settings.json`;
+      // Use friendly filename if we have a game name
+      const safeName = gameName?.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+      a.download = safeName ? `${safeName} (${cartId}) settings.json` : `${cartId}-settings.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -834,19 +759,33 @@ function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm('Delete local settings? This cannot be undone.')) return;
+  const handleResetToDefault = async () => {
     try {
       setError(null);
-      const response = await fetch(`/api/cartridges/${cartId}/settings`, { method: 'DELETE' });
+      const defaultSettings = createDefaultSettings(gameName);
+      const response = await fetch(`/api/cartridges/${cartId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaultSettings),
+      });
+
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Delete failed');
+        throw new Error(data.error || 'Failed to reset settings');
       }
-      setConflictState('resolved');
+
+      // If SD card connected, also sync to SD
+      if (sdCardPath) {
+        await fetch(`/api/cartridges/${cartId}/settings/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sdCardPath }),
+        });
+      }
+
       await fetchInfo();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setError(err instanceof Error ? err.message : 'Failed to reset settings');
     }
   };
 
@@ -927,22 +866,21 @@ function SettingsTab({ cartId, sdCardPath }: SettingsTabProps) {
             cartId={cartId}
             settings={info.local.settings}
             sdCardPath={sdCardPath}
-            onSave={fetchInfo}
           />
 
           {/* Secondary Actions */}
           <div className="settings-secondary-actions">
             <button className="btn-ghost" onClick={handleExport}>
-              Export to File
+              Export settings.json
             </button>
             <button
               className="btn-ghost"
               onClick={() => inputRef.current?.click()}
             >
-              Import from File
+              Import settings.json
             </button>
-            <button className="btn-ghost btn-danger-text" onClick={handleDelete}>
-              Delete Settings
+            <button className="btn-ghost btn-danger-text" onClick={handleResetToDefault}>
+              Reset to Default
             </button>
           </div>
         </>
@@ -967,20 +905,47 @@ interface SettingsEditorProps {
   cartId: string;
   settings: CartridgeSettings;
   sdCardPath?: string;
-  onSave: () => void;
 }
 
 type SettingsEditorTab = 'display' | 'hardware';
 
-function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave }: SettingsEditorProps) {
+function SettingsEditor({ cartId, settings: initialSettings, sdCardPath }: SettingsEditorProps) {
   const [activeTab, setActiveTab] = useState<SettingsEditorTab>('display');
   const [settings, setSettings] = useState<CartridgeSettings>(initialSettings);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
+
+  // Track the initial settings JSON to detect actual changes
+  const initialSettingsJson = useRef(JSON.stringify(initialSettings));
 
   const currentDisplayMode = settings.display.odm;
   const isCleanMode = currentDisplayMode === 'clean';
+
+  // Subscribe to save status updates for this cartridge
+  useEffect(() => {
+    const unsubscribe = onSaveStatus((statusCartId, status, errorMsg) => {
+      if (statusCartId === cartId) {
+        setSaveStatus(status);
+        if (status === 'error') {
+          setError(errorMsg || 'Save failed');
+        } else if (status === 'saved') {
+          setError(null);
+          // Update our baseline so we know current state is saved
+          initialSettingsJson.current = JSON.stringify(settings);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [cartId, settings]);
+
+  // Auto-save when settings actually change from initial/saved state
+  useEffect(() => {
+    const currentJson = JSON.stringify(settings);
+    // Only queue save if settings differ from initial/last-saved state
+    if (currentJson !== initialSettingsJson.current) {
+      queueSettingsSave(cartId, settings, sdCardPath);
+    }
+  }, [cartId, settings, sdCardPath]);
 
   // Helper to update display settings
   const updateDisplayMode = (mode: DisplayMode) => {
@@ -988,7 +953,6 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
       ...prev,
       display: { ...prev.display, odm: mode }
     }));
-    setHasChanges(true);
   };
 
   // Helper to update CRT mode settings
@@ -1011,7 +975,6 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
         }
       }
     }));
-    setHasChanges(true);
   };
 
   // Helper to update Clean mode settings
@@ -1032,7 +995,6 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
         }
       }
     }));
-    setHasChanges(true);
   };
 
   // Helper to update hardware settings
@@ -1044,47 +1006,6 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
       ...prev,
       hardware: { ...prev.hardware, [key]: value }
     }));
-    setHasChanges(true);
-  };
-
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      setError(null);
-
-      // Save to local
-      const response = await fetch(`/api/cartridges/${cartId}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save settings');
-      }
-
-      // If SD card is connected, also save to SD
-      if (sdCardPath) {
-        const uploadResponse = await fetch(`/api/cartridges/${cartId}/settings/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sdCardPath }),
-        });
-
-        if (!uploadResponse.ok) {
-          const data = await uploadResponse.json();
-          throw new Error(data.error || 'Failed to sync to SD card');
-        }
-      }
-
-      setHasChanges(false);
-      onSave();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
   };
 
   // Get current CRT mode settings
@@ -1149,27 +1070,12 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
                 onChange={(val) => updateCRTSetting(currentDisplayMode, 'verticalBeamConvergence', val as BeamConvergence)}
               />
 
-              {isEdgeOvershootLocked ? (
-                <div className="control-row disabled">
-                  <span className="control-label">Edge Overshoot</span>
-                  <div className="toggle-container">
-                    <span className={`toggle-text ${edgeOvershootLockedValue ? 'on' : 'off'}`}>
-                      {edgeOvershootLockedValue ? 'ON' : 'OFF'}
-                    </span>
-                    <div className={`toggle-switch disabled ${edgeOvershootLockedValue ? 'on' : 'off'}`}>
-                      <span className="toggle-thumb">
-                        {edgeOvershootLockedValue && <span className="toggle-thumb-dot" />}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <ToggleSwitch
-                  label="Edge Overshoot"
-                  checked={crtSettings.enableEdgeOvershoot}
-                  onChange={(val) => updateCRTSetting(currentDisplayMode, 'enableEdgeOvershoot', val)}
-                />
-              )}
+              <ToggleSwitch
+                label="Edge Overshoot"
+                checked={isEdgeOvershootLocked ? edgeOvershootLockedValue : crtSettings.enableEdgeOvershoot}
+                onChange={(val) => updateCRTSetting(currentDisplayMode, 'enableEdgeOvershoot', val)}
+                disabled={isEdgeOvershootLocked}
+              />
 
               <OptionSelector
                 label="Edge Hardness"
@@ -1309,18 +1215,6 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSave 
         </div>
       )}
 
-      {/* Save Button */}
-      {hasChanges && (
-        <div className="settings-editor-actions">
-          <button
-            className="btn-primary"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

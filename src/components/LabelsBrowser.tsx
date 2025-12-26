@@ -381,6 +381,9 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
                   placeholder="Game name or cart ID..."
                   value={searchQuery}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
                 />
                 {searchQuery && (
                   <button

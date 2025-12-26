@@ -213,6 +213,9 @@ export function AddCartridgeModal({ isOpen, onClose, onAdd }: AddCartridgeModalP
           maxLength={8}
           className={cartId && !isValidCartId ? 'invalid' : ''}
           autoFocus
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
         />
         {cartId && !isValidCartId && (
           <span className="field-hint error">Must be exactly 8 hex characters</span>
@@ -243,6 +246,9 @@ export function AddCartridgeModal({ isOpen, onClose, onAdd }: AddCartridgeModalP
               onChange={(e) => setGameName(e.target.value)}
               placeholder={isNameRequired ? "Enter game name (required)" : "Enter game name"}
               className={isNameRequired && !gameName.trim() ? 'needs-input' : ''}
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
             />
           ) : (
             <div className="readonly-field">{gameName}</div>

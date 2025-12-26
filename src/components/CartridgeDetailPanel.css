@@ -489,6 +489,27 @@
   padding-top: 0.5rem;
 }
 
+/* Save Status Indicator */
+.settings-save-status {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.settings-save-status.pending {
+  color: var(--color-text-muted);
+}
+
+.settings-save-status.saving {
+  color: var(--color-accent);
+}
+
+.settings-save-status.error {
+  color: var(--color-error);
+  background: rgba(239, 68, 68, 0.1);
+}
+
 /* Control row disabled state */
 .control-row.disabled {
   opacity: 0.5;

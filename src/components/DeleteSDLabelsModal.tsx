@@ -100,6 +100,8 @@ export function DeleteSDLabelsModal({ isOpen, onClose, onDeleted, sdCardPath }: 
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder="delete"
           autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
         />
       </div>
     </Modal>
