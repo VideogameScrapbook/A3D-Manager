@@ -142,6 +142,26 @@ For the complete settings structure and all available options, see **[ANALOGUE_3
 
 Settings changes are automatically saved with a 2-second debounce. Multiple cartridges can be queued simultaneously, and pending saves are flushed when leaving the page.
 
+### Copy & Paste Settings
+
+You can copy settings from one cartridge and apply them to multiple other cartridges in bulk:
+
+1. **Copy Settings**: Open any cartridge's Settings tab and click the "Copy Settings" button
+2. **Enter Selection Mode**: In the Cartridge Explorer, click "Select" to enter Selection Mode
+3. **Select Target Cartridges**: Click on the cartridges you want to apply settings to
+4. **Paste Settings**: Click "Paste Settings" in the selection toolbar to open the confirmation modal
+5. **Confirm**: Review the source and target cartridges, then confirm to apply settings
+
+When pasting settings:
+- All display and hardware settings are copied (display mode, beam convergence, image size, overclock, etc.)
+- If an SD card is connected, settings are automatically synced to the SD card for each cartridge
+- The title field in each cartridge's settings is preserved from the source
+
+This is useful for:
+- Applying preferred display settings across your entire collection
+- Configuring similar hardware settings for games from the same region
+- Quickly setting up new cartridges with your preferred defaults
+
 ---
 
 ## Game Paks (Controller Pak Save Data)
@@ -409,7 +429,7 @@ Backups are deduplicated during import using MD5 hashes. If an imported backup h
 - Paginated grid view of all cartridges
 - Filter by: owned status, region, language, video mode
 - Search by name
-- Multi-select for bulk operations
+- Multi-select for bulk operations (mark owned, export, paste settings)
 
 ### Detail Panel
 
@@ -418,6 +438,16 @@ Slide-over panel with tabs:
 1. **Label** - View and manage artwork
 2. **Settings** - Edit display and hardware configuration
 3. **Game Pak** - Manage controller pak save data
+
+#### Settings Tab
+
+The Settings tab provides:
+
+- **Display Settings** - Configure display mode (BVM, PVM, CRT, Scanlines, Clean) and mode-specific options
+- **Hardware Settings** - Configure hardware options like expansion pak, region, overclock, etc.
+- **Copy Settings** - Copy this cartridge's settings to paste to other cartridges in bulk
+- **Export/Import** - Export or import settings as JSON files
+- **Reset to Default** - Reset settings to factory defaults
 
 #### Game Pak Tab
 

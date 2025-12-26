@@ -6,13 +6,21 @@ import path from 'path';
 // Types
 // =============================================================================
 
-export type BeamConvergence = 'Off' | 'Consumer' | 'Professional';
-export type ImageSize = 'Fill' | 'Fit';
-export type ImageFit = 'Original' | 'Stretch';
-export type Sharpness = 'Low' | 'Medium' | 'High';
-export type Region = 'Auto' | 'NTSC' | 'PAL';
-export type Overclock = 'Auto' | 'Enhanced' | 'Unleashed';
-export type DisplayMode = 'bvm' | 'pvm' | 'crt' | 'scanlines' | 'clean';
+export const BEAM_CONVERGENCE_VALUES = ['Off', 'Consumer', 'Professional'] as const;
+export const IMAGE_SIZE_VALUES = ['Fill', 'Fit'] as const;
+export const IMAGE_FIT_VALUES = ['Original', 'Stretch'] as const;
+export const SHARPNESS_VALUES = ['Low', 'Medium', 'High'] as const;
+export const REGION_VALUES = ['Auto', 'NTSC', 'PAL'] as const;
+export const OVERCLOCK_VALUES = ['Auto', 'Enhanced', 'Enhanced+', 'Unleashed'] as const;
+export const DISPLAY_MODE_VALUES = ['bvm', 'pvm', 'crt', 'scanlines', 'clean'] as const;
+
+export type BeamConvergence = typeof BEAM_CONVERGENCE_VALUES[number];
+export type ImageSize = typeof IMAGE_SIZE_VALUES[number];
+export type ImageFit = typeof IMAGE_FIT_VALUES[number];
+export type Sharpness = typeof SHARPNESS_VALUES[number];
+export type Region = typeof REGION_VALUES[number];
+export type Overclock = typeof OVERCLOCK_VALUES[number];
+export type DisplayMode = typeof DISPLAY_MODE_VALUES[number];
 
 export interface CRTModeSettings {
   horizontalBeamConvergence: BeamConvergence;
@@ -301,15 +309,22 @@ export function createDefaultSettings(title: string = 'Unknown Cartridge'): Cart
 
 /**
  * Ensure a game folder exists locally
+ * First checks if a folder already exists for this cartId (regardless of title),
+ * and uses that if found. Otherwise creates a new folder with the provided title.
  */
 export async function ensureLocalGameFolder(cartId: string, title: string): Promise<string> {
+  // First, check if a folder already exists for this cartId
+  const existingFolder = await findGameFolder(LOCAL_GAMES_DIR, cartId);
+  if (existingFolder) {
+    return existingFolder;
+  }
+
+  // No existing folder, create a new one
   const normalizedId = cartId.toLowerCase();
   const folderName = `${title} ${normalizedId}`;
   const folderPath = path.join(LOCAL_GAMES_DIR, folderName);
 
-  if (!existsSync(folderPath)) {
-    await mkdir(folderPath, { recursive: true });
-  }
+  await mkdir(folderPath, { recursive: true });
 
   return folderPath;
 }
@@ -426,11 +441,11 @@ export async function uploadSettingsToSD(
 export function validateHardwareSettings(settings: Partial<HardwareSettings>): string[] {
   const errors: string[] = [];
 
-  if (settings.region !== undefined && !['Auto', 'NTSC', 'PAL'].includes(settings.region)) {
+  if (settings.region !== undefined && !REGION_VALUES.includes(settings.region)) {
     errors.push(`Invalid region: ${settings.region}`);
   }
 
-  if (settings.overclock !== undefined && !['Auto', 'Enhanced', 'Unleashed'].includes(settings.overclock)) {
+  if (settings.overclock !== undefined && !OVERCLOCK_VALUES.includes(settings.overclock)) {
     errors.push(`Invalid overclock: ${settings.overclock}`);
   }
 

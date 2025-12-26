@@ -554,6 +554,101 @@
   margin-left: auto;
 }
 
+/* Copy Settings Button */
+.copy-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-settings-btn .copy-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+}
+
+.copy-settings-btn:hover .copy-icon {
+  opacity: 1;
+}
+
+/* Inline copied message */
+.copied-message-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  color: #22c55e;
+  font-size: 0.85rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.copied-message-inline .copied-icon {
+  font-size: 0.9rem;
+}
+
+/* Export/Import Dropdown */
+.export-import-dropdown {
+  position: relative;
+}
+
+.dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dropdown-arrow {
+  width: 10px;
+  height: 10px;
+  opacity: 0.7;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.dropdown-arrow.open {
+  transform: rotate(-90deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.25rem;
+  min-width: 160px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-item:first-child {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.dropdown-item:last-child {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
 /* Conflict Resolution */
 .conflict-resolution {
   background: rgba(251, 191, 36, 0.1);

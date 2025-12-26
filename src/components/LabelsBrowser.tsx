@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useImageCache } from '../App';
+import { useImageCache, useSettingsClipboard } from '../App';
 import { CartridgeCard } from './CartridgeCard';
 import { Pagination } from './Pagination';
 import { LabelsImportModal } from './LabelsImportModal';
 import { ImportFromSDModal } from './ImportFromSDModal';
 import { ExportBundleModal } from './ExportBundleModal';
 import { LabelSyncModal } from './LabelSyncModal';
+import { PasteSettingsModal } from './PasteSettingsModal';
 import { CartridgesEmptyState } from './CartridgesEmptyState';
 import { useLabelSync } from './LabelSyncIndicator';
-import { TooltipIcon, Button } from './ui';
+import { TooltipIcon, Tooltip, Button } from './ui';
 import './LabelsBrowser.css';
 
 interface LabelEntry {
@@ -63,6 +64,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
   const hasLoadedRef = useRef(false);
   const { imageCacheBuster: globalCacheBuster } = useImageCache();
   const { labelsRefreshKey } = useLabelSync();
+  const { copiedSettings } = useSettingsClipboard();
   const [localCacheBuster, setLocalCacheBuster] = useState(0);
   // Combine global and local cache busters
   const imageCacheBuster = Math.max(globalCacheBuster, localCacheBuster);
@@ -89,6 +91,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
   const [showImportFromSDModal, setShowImportFromSDModal] = useState(false);
   const [showExportBundleModal, setShowExportBundleModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showPasteSettingsModal, setShowPasteSettingsModal] = useState(false);
 
   // Selection mode
   const [selectionMode, setSelectionMode] = useState(false);
@@ -349,7 +352,6 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [labelsRefreshKey]);
 
-  const hasLabels = status?.hasLabels ?? false;
   const hasContent = status?.imported ?? false;
 
   return (
@@ -365,14 +367,13 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
             </div>
             
             <div className="labels-header-actions">
-              {!!sdCardPath && hasLabels && (
+              {!!sdCardPath && (
                 <Button variant="secondary" size="sm" onClick={() => setShowImportFromSDModal(true)} className={unownedOnSDCount > 0 ? 'has-indicator' : ''}>
                   Import Owned from SD
                   {unownedOnSDCount > 0 && <span className="btn-badge">{unownedOnSDCount}</span>}
                 </Button>
               )}
-              {hasLabels && (
-                <Button
+              <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => {
@@ -382,7 +383,6 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
                 >
                   {selectionMode ? 'Exit Select' : 'Select'}
                 </Button>
-              )}
             </div>
           </div>
         </div>
@@ -539,6 +539,27 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
                 >
                   Mark Owned
                 </Button>
+                {copiedSettings ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={selectedCartIds.size === 0}
+                    onClick={() => setShowPasteSettingsModal(true)}
+                  >
+                    Paste Settings
+                  </Button>
+                ) : (
+                  <Tooltip content="Copy settings from a cartridge first. Open a cartridge's Settings tab and click 'Copy Settings' to enable this button.">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                      className="paste-settings-disabled"
+                    >
+                      Paste Settings
+                    </Button>
+                  </Tooltip>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -631,6 +652,23 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
         onSyncComplete={handleRefresh}
+      />
+
+      <PasteSettingsModal
+        isOpen={showPasteSettingsModal}
+        onClose={() => setShowPasteSettingsModal(false)}
+        onPasteComplete={() => {
+          setShowPasteSettingsModal(false);
+          setSelectionMode(false);
+          setSelectedCartIds(new Set());
+        }}
+        selectedCartIds={Array.from(selectedCartIds)}
+        cartIdToName={Object.fromEntries(
+          entries
+            .filter(e => selectedCartIds.has(e.cartId))
+            .map(e => [e.cartId, e.name])
+        )}
+        sdCardPath={sdCardPath}
       />
     </div>
   );

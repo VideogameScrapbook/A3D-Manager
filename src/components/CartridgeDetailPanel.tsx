@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useImageCache } from '../App';
+import { useImageCache, useSettingsClipboard } from '../App';
 import { IconButton, OptionSelector, ToggleSwitch } from './controls';
+import { Tooltip } from './ui/Tooltip';
 import { CartridgeSprite } from './CartridgeSprite';
 import { ConnectionIndicator } from './ConnectionIndicator';
 import { useLabelSync } from './LabelSyncIndicator';
@@ -641,7 +642,24 @@ function SettingsTab({ cartId, sdCardPath, gameName }: SettingsTabProps) {
   const [syncing, setSyncing] = useState(false);
   const [conflictState, setConflictState] = useState<ConflictResolution>('resolved');
   const [autoImported, setAutoImported] = useState(false);
+  const [showCopiedMessage, setShowCopiedMessage] = useState(false);
+  const [showExportImportMenu, setShowExportImportMenu] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const exportImportRef = useRef<HTMLDivElement>(null);
+  const { copySettings: copyToClipboard } = useSettingsClipboard();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportImportRef.current && !exportImportRef.current.contains(event.target as Node)) {
+        setShowExportImportMenu(false);
+      }
+    };
+    if (showExportImportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportImportMenu]);
 
   const isConnected = !!sdCardPath;
 
@@ -860,6 +878,13 @@ function SettingsTab({ cartId, sdCardPath, gameName }: SettingsTabProps) {
     }
   };
 
+  const handleCopySettings = () => {
+    if (!info?.local?.settings) return;
+    copyToClipboard(cartId, gameName || 'Unknown', info.local.settings);
+    setShowCopiedMessage(true);
+    setTimeout(() => setShowCopiedMessage(false), 3000);
+  };
+
   if (loading || syncing) {
     return (
       <div className="tab-content loading">
@@ -941,18 +966,59 @@ function SettingsTab({ cartId, sdCardPath, gameName }: SettingsTabProps) {
 
           {/* Secondary Actions */}
           <div className="settings-secondary-actions">
-            <button className="btn-ghost" onClick={handleExport}>
-              Export settings.json
-            </button>
-            <button
-              className="btn-ghost"
-              onClick={() => inputRef.current?.click()}
-            >
-              Import settings.json
-            </button>
-            <button className="btn-ghost btn-danger-text" onClick={handleResetToDefault}>
-              Reset to Default
-            </button>
+            <div className="export-import-dropdown" ref={exportImportRef}>
+              <button
+                className="btn-ghost dropdown-trigger"
+                onClick={() => setShowExportImportMenu(!showExportImportMenu)}
+              >
+                Export / Import
+                <img
+                  src="/pixel-arrow-right.png"
+                  alt=""
+                  className={`dropdown-arrow ${showExportImportMenu ? 'open' : ''}`}
+                />
+              </button>
+              {showExportImportMenu && (
+                <div className="dropdown-menu">
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      handleExport();
+                      setShowExportImportMenu(false);
+                    }}
+                  >
+                    Export settings.json
+                  </button>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      inputRef.current?.click();
+                      setShowExportImportMenu(false);
+                    }}
+                  >
+                    Import settings.json
+                  </button>
+                </div>
+              )}
+            </div>
+            <Tooltip content="Reset this cartridge to the Analogue 3D default display and hardware settings">
+              <button className="btn-ghost btn-danger-text" onClick={handleResetToDefault}>
+                Reset
+              </button>
+            </Tooltip>
+            {showCopiedMessage ? (
+              <div className="copied-message-inline">
+                <span className="copied-icon">✓</span>
+                <span>Copied!</span>
+              </div>
+            ) : (
+              <Tooltip content="Copy these settings to paste to other cartridges in Select Mode">
+                <button className="btn-ghost copy-settings-btn" onClick={handleCopySettings}>
+                  <img src="/copy.png" alt="" className="copy-icon" />
+                  <span>Copy</span>
+                </button>
+              </Tooltip>
+            )}
           </div>
         </>
       )}

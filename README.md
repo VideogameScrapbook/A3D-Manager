@@ -27,6 +27,7 @@ Configure display settings individually for each cartridge:
 - **Display Mode**: BVM, PVM, CRT, Scanlines, or Clean
 - **CRT Mode Options**: Beam Convergence (Horizontal/Vertical), Edge Overshoot, Edge Hardness, Image Size, Image Fit
 - **Clean Mode Options**: Interpolation Algorithm, Gamma Transfer, Sharpness, Image Size, Image Fit
+- **Copy & Paste Settings**: Copy settings from one cartridge and paste to multiple others in bulk using Selection Mode
 
 ![Edit Cartridge - Settings](src/assets/screenshots/Edit%20Cartridge%20-%20Settings.png)
 

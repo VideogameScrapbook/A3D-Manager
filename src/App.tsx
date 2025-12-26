@@ -7,6 +7,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { ComponentTestPage } from './components/ComponentTestPage';
 import { LabelSyncProvider } from './components/LabelSyncIndicator';
 import type { SDCard } from './types';
+import type { CartridgeSettings } from './lib/defaultSettings';
 import './App.css';
 
 // Image Cache Context for global cache invalidation
@@ -137,6 +138,51 @@ function SDCardProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Settings Clipboard Context for copy/paste settings between cartridges
+export interface CopiedSettingsInfo {
+  cartId: string;
+  gameName: string;
+  settings: CartridgeSettings;
+  copiedAt: number;
+}
+
+interface SettingsClipboardContextType {
+  copiedSettings: CopiedSettingsInfo | null;
+  copySettings: (cartId: string, gameName: string, settings: CartridgeSettings) => void;
+  clearCopiedSettings: () => void;
+}
+
+const SettingsClipboardContext = createContext<SettingsClipboardContextType | null>(null);
+
+export function useSettingsClipboard() {
+  const context = useContext(SettingsClipboardContext);
+  if (!context) throw new Error('useSettingsClipboard must be used within SettingsClipboardProvider');
+  return context;
+}
+
+function SettingsClipboardProvider({ children }: { children: React.ReactNode }) {
+  const [copiedSettings, setCopiedSettings] = useState<CopiedSettingsInfo | null>(null);
+
+  const copySettings = useCallback((cartId: string, gameName: string, settings: CartridgeSettings) => {
+    setCopiedSettings({
+      cartId,
+      gameName,
+      settings,
+      copiedAt: Date.now(),
+    });
+  }, []);
+
+  const clearCopiedSettings = useCallback(() => {
+    setCopiedSettings(null);
+  }, []);
+
+  return (
+    <SettingsClipboardContext.Provider value={{ copiedSettings, copySettings, clearCopiedSettings }}>
+      {children}
+    </SettingsClipboardContext.Provider>
+  );
+}
+
 function AppContent() {
   return (
     <div className="app">
@@ -160,9 +206,11 @@ function App() {
     <BrowserRouter>
       <ImageCacheProvider>
         <SDCardProvider>
-          <LabelSyncProvider>
-            <AppContent />
-          </LabelSyncProvider>
+          <SettingsClipboardProvider>
+            <LabelSyncProvider>
+              <AppContent />
+            </LabelSyncProvider>
+          </SettingsClipboardProvider>
         </SDCardProvider>
       </ImageCacheProvider>
     </BrowserRouter>

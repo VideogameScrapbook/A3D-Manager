@@ -24,6 +24,8 @@ import {
   type CartridgeSettings,
 } from '../lib/cartridge-settings.js';
 
+import { lookupGameName } from '../lib/game-lookup.js';
+
 import {
   getGamePakInfo,
   readLocalGamePak,
@@ -480,6 +482,32 @@ router.post('/:cartId/settings/import', upload.single('settings'), async (req, r
     if (!validation.valid) {
       return res.status(400).json({ error: 'Invalid settings file', details: validation.errors });
     }
+
+    // Preserve the target cartridge's title
+    // Priority: existing target title > system game name > imported title
+    let targetTitle = settings.title;
+
+    // First, try to get the target's existing settings title
+    try {
+      const existingInfo = await getSettingsInfo(cartId);
+      if (existingInfo.local?.settings?.title &&
+          existingInfo.local.settings.title !== 'Unknown Cartridge') {
+        targetTitle = existingInfo.local.settings.title;
+      }
+    } catch {
+      // Ignore errors fetching existing settings
+    }
+
+    // If still "Unknown Cartridge" or same as imported, try the system game name
+    if (targetTitle === 'Unknown Cartridge' || targetTitle === settings.title) {
+      const systemName = await lookupGameName(cartId);
+      if (systemName && systemName !== 'Unknown Cartridge') {
+        targetTitle = systemName;
+      }
+    }
+
+    // Update the settings with the correct title
+    settings.title = targetTitle;
 
     const savedPath = await saveLocalSettings(cartId, settings);
     res.json({ success: true, path: savedPath });
