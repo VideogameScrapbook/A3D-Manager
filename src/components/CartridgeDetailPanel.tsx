@@ -962,6 +962,16 @@ function SettingsTab({ cartId, sdCardPath, gameName }: SettingsTabProps) {
             cartId={cartId}
             settings={info.local.settings}
             sdCardPath={sdCardPath}
+            onSettingsChange={(newSettings) => {
+              // Update local info so copy settings uses current values
+              setInfo(prev => prev ? {
+                ...prev,
+                local: {
+                  ...prev.local,
+                  settings: newSettings,
+                }
+              } : prev);
+            }}
           />
 
           {/* Secondary Actions */}
@@ -1042,11 +1052,12 @@ interface SettingsEditorProps {
   cartId: string;
   settings: CartridgeSettings;
   sdCardPath?: string;
+  onSettingsChange?: (settings: CartridgeSettings) => void;
 }
 
 type SettingsEditorTab = 'display' | 'hardware';
 
-function SettingsEditor({ cartId, settings: initialSettings, sdCardPath }: SettingsEditorProps) {
+function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSettingsChange }: SettingsEditorProps) {
   const [activeTab, setActiveTab] = useState<SettingsEditorTab>('display');
   const [settings, setSettings] = useState<CartridgeSettings>(initialSettings);
   const [_saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
@@ -1081,8 +1092,10 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath }: Setti
     // Only queue save if settings differ from initial/last-saved state
     if (currentJson !== initialSettingsJson.current) {
       queueSettingsSave(cartId, settings, sdCardPath);
+      // Notify parent of settings change so copy uses current settings
+      onSettingsChange?.(settings);
     }
-  }, [cartId, settings, sdCardPath]);
+  }, [cartId, settings, sdCardPath, onSettingsChange]);
 
   // Helper to update display settings
   const updateDisplayMode = (mode: DisplayMode) => {

@@ -17,6 +17,7 @@ export function CartridgesPage() {
       />
       {selectedCartridge && (
         <CartridgeDetailPanel
+          key={selectedCartridge.cartId}
           cartId={selectedCartridge.cartId}
           gameName={selectedCartridge.name}
           sdCardPath={selectedSDCard?.path}

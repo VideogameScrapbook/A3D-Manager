@@ -6,7 +6,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
 node_modules
 dist
 dist-ssr
@@ -28,10 +27,9 @@ sd-card-example/
 *.njsproj
 *.sln
 *.sw?
-
 .claude/
-
 roms.dat.xml
+library.db
 
 # Local notepad
 notes.md

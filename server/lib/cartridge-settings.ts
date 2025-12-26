@@ -456,7 +456,7 @@ export function validateHardwareSettings(settings: Partial<HardwareSettings>): s
  * Validate display mode settings
  */
 export function validateDisplayMode(mode: string): boolean {
-  return ['bvm', 'pvm', 'crt', 'scanlines', 'clean'].includes(mode);
+  return DISPLAY_MODE_VALUES.includes(mode as DisplayMode);
 }
 
 /**

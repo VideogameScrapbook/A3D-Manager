@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettingsClipboard } from '../App';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -25,6 +25,15 @@ export function PasteSettingsModal({
   const [isPasting, setIsPasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<{ success: number; failed: number } | null>(null);
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsPasting(false);
+      setError(null);
+      setResults(null);
+    }
+  }, [isOpen]);
 
   const handlePaste = async () => {
     if (!copiedSettings) return;
@@ -102,6 +111,10 @@ export function PasteSettingsModal({
       // If all succeeded, auto-close after a brief delay
       if (failCount === 0) {
         setTimeout(() => {
+          // Reset state before closing so next open shows confirmation
+          setResults(null);
+          setError(null);
+          setIsPasting(false);
           onPasteComplete();
         }, 1500);
       }
