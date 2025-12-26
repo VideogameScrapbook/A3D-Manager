@@ -24,10 +24,15 @@ All local data is stored in the `.local/` directory:
 ├── labels.db              # Binary labels database
 ├── owned-carts.json       # Ownership tracking
 ├── user-carts.json        # Custom cartridge names
-└── Library/N64/Games/
-    └── [Game Title] [cartId]/
-        ├── settings.json        # Display/hardware settings
-        └── controller_pak.img   # Save data (32KB)
+└── Library/N64/
+    ├── Games/
+    │   └── [Game Title] [cartId]/
+    │       ├── settings.json        # Display/hardware settings
+    │       └── controller_pak.img   # Save data (32KB)
+    └── GamePakBackups/
+        └── [cartId]/
+            ├── metadata.json        # Backup index
+            └── [backupId].img       # Individual backup files
 ```
 
 ### owned-carts.json
@@ -85,6 +90,46 @@ Each cartridge with settings or save data gets a folder named `[Game Title] [car
     └── settings.json
 ```
 
+### GamePakBackups
+
+Backups are stored separately from active game paks to preserve save history without affecting the working save.
+
+```
+.local/Library/N64/GamePakBackups/
+└── ac631da0/
+    ├── metadata.json
+    ├── a1b2c3d4-e5f6-7890-abcd-ef1234567890.img
+    └── b2c3d4e5-f6a7-8901-bcde-f12345678901.img
+```
+
+#### metadata.json
+
+```json
+{
+  "version": 1,
+  "cartId": "ac631da0",
+  "backups": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Before final boss",
+      "description": "Save state before attempting the final boss fight",
+      "createdAt": "2025-12-26T10:30:00.000Z",
+      "md5Hash": "d41d8cd98f00b204e9800998ecf8427e",
+      "size": 32768
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID v4 identifier |
+| `name` | User-provided name (defaults to "Backup YYYY-MM-DD") |
+| `description` | Optional notes |
+| `createdAt` | ISO 8601 timestamp |
+| `md5Hash` | MD5 hash of the backup file for deduplication |
+| `size` | File size in bytes (always 32768) |
+
 ---
 
 ## Settings
@@ -101,9 +146,43 @@ Settings changes are automatically saved with a 2-second debounce. Multiple cart
 
 ## Game Paks (Controller Pak Save Data)
 
-Controller pak images are 32KB (32,768 bytes) files containing save data.
+Controller pak images are 32KB (32,768 bytes) files containing save data for games that use the Controller Pak accessory.
 
-The pak is divided into 123 pages of 256 bytes each. The first 5 pages (1,280 bytes) are reserved for the header and directory structure.
+The pak is divided into 128 pages of 256 bytes each. The first 5 pages (1,280 bytes) are reserved for the header and directory structure, leaving 123 user-accessible pages for save data.
+
+### Sync Status
+
+Game paks can exist in three locations:
+- **Local** - `.local/Library/N64/Games/[Title] [cartId]/controller_pak.img`
+- **SD Card** - `[SD]/System/Library/N64/Games/[Title] [cartId]/controller_pak.img`
+- **Backups** - `.local/Library/N64/GamePakBackups/[cartId]/`
+
+The sync status compares local and SD card versions using MD5 hashing:
+
+| Local | SD | Status |
+|-------|-----|--------|
+| Exists | Same hash | In Sync |
+| Exists | Different hash | Conflict |
+| Exists | Missing | Local only |
+| Missing | Exists | SD only |
+| Missing | Missing | No data |
+
+### Conflict Resolution
+
+When local and SD card game paks have different content, users can resolve by:
+- **Use Local** - Upload the local version to SD card
+- **Use SD** - Download the SD card version to local
+
+### Backups
+
+Backups preserve game pak states without affecting the active save. Features include:
+
+- **Create** - Snapshot current local game pak with optional name and description
+- **Restore** - Copy a backup to local (and optionally sync to SD card)
+- **Export** - Download backup as `.img` file
+- **Delete** - Remove backup from storage
+
+Backups are deduplicated by MD5 hash during import to avoid storing identical saves multiple times.
 
 ---
 
@@ -143,6 +222,74 @@ The pak is divided into 123 pages of 256 bytes each. The first 5 pages (1,280 by
 | `POST` | `/api/cartridges/:cartId/game-pak/import` | Import game pak from file |
 | `GET` | `/api/cartridges/:cartId/game-pak/export` | Export game pak as .img |
 | `DELETE` | `/api/cartridges/:cartId/game-pak` | Delete local game pak |
+
+#### Query Parameters
+
+The `GET /api/cartridges/:cartId/game-pak` endpoint accepts:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `includeHash` | boolean | Include MD5 hashes and sync status |
+| `sdCardPath` | string | SD card mount path for comparison |
+
+#### Response with `includeHash=true`
+
+```json
+{
+  "local": {
+    "exists": true,
+    "path": ".local/Library/N64/Games/Mario Kart 64 b393776d/controller_pak.img",
+    "size": 32768
+  },
+  "sd": {
+    "exists": true,
+    "path": "/Volumes/A3D/System/Library/N64/Games/Mario Kart 64 b393776d/controller_pak.img",
+    "size": 32768
+  },
+  "syncStatus": {
+    "localHash": "d41d8cd98f00b204e9800998ecf8427e",
+    "sdHash": "e9800998ecf8427ed41d8cd98f00b204",
+    "inSync": false,
+    "hasConflict": true
+  }
+}
+```
+
+### Game Pak Backups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/cartridges/:cartId/game-pak/backups` | List all backups |
+| `POST` | `/api/cartridges/:cartId/game-pak/backups` | Create new backup |
+| `GET` | `/api/cartridges/:cartId/game-pak/backups/:backupId` | Download backup as .img |
+| `PUT` | `/api/cartridges/:cartId/game-pak/backups/:backupId` | Update backup name/description |
+| `DELETE` | `/api/cartridges/:cartId/game-pak/backups/:backupId` | Delete backup |
+| `POST` | `/api/cartridges/:cartId/game-pak/backups/:backupId/restore` | Restore backup |
+
+#### Create Backup Request
+
+```json
+{
+  "name": "Before final boss",
+  "description": "Optional notes about this backup"
+}
+```
+
+Both fields are optional. If `name` is omitted, it defaults to "Backup YYYY-MM-DD".
+
+#### Restore Backup Request
+
+```json
+{
+  "syncToSD": true,
+  "sdCardPath": "/Volumes/A3D"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `syncToSD` | boolean | Also copy restored backup to SD card |
+| `sdCardPath` | string | Required if `syncToSD` is true |
 
 ### Bundles
 
@@ -210,9 +357,14 @@ archive.a3d (ZIP)
 ├── settings/
 │   ├── b393776d.json
 │   └── ...
-└── game-paks/
-    ├── b393776d.img
-    └── ...
+├── game-paks/
+│   ├── b393776d.img
+│   └── ...
+└── game-pak-backups/
+    └── ac631da0/
+        ├── metadata.json
+        ├── uuid1.img
+        └── uuid2.img
 ```
 
 ### manifest.json
@@ -227,10 +379,13 @@ archive.a3d (ZIP)
     "hasOwnedCarts": true,
     "settingsCount": 3,
     "gamePaksCount": 2,
+    "gamePakBackupsCount": 5,
     "cartIds": ["b393776d", "ac631da0"]
   }
 }
 ```
+
+The `gamePakBackupsCount` is the total number of individual backup files across all cartridges.
 
 ### Import Merge Strategies
 
@@ -240,7 +395,10 @@ When importing a bundle, each component supports merge strategies:
 |----------|----------|
 | `skip` | Don't overwrite existing data |
 | `overwrite` | Replace with bundle version |
-| `keep-both` | Keep both versions where applicable |
+
+#### Game Pak Backup Deduplication
+
+Backups are deduplicated during import using MD5 hashes. If an imported backup has the same hash as an existing backup for that cartridge, it is skipped to avoid storing duplicate files.
 
 ---
 
@@ -261,6 +419,18 @@ Slide-over panel with tabs:
 2. **Settings** - Edit display and hardware configuration
 3. **Game Pak** - Manage controller pak save data
 
+#### Game Pak Tab
+
+The Game Pak tab provides:
+
+- **Sync Status** - Visual indicator showing whether local and SD card versions match
+- **Conflict Resolution** - When versions differ, choose to use local or SD card version
+- **Import/Export** - Upload `.img` files or download the current game pak
+- **Backups List** - View all saved backups sorted by date (newest first)
+- **Create Backup** - Save current game pak with optional name and description
+- **Restore Backup** - Restore a backup to local with optional SD card sync
+- **Edit/Delete Backups** - Manage backup metadata or remove backups
+
 ### Import from SD
 
 Scans the SD card's Games folder to:
@@ -269,9 +439,15 @@ Scans the SD card's Games folder to:
 
 ### Export/Import Bundles
 
-- Create .a3d archives with selected cartridges
-- Choose which components to include (labels, settings, game paks, ownership)
+- Create .a3d archives with selected cartridges or full library
+- Choose which components to include:
+  - Labels database
+  - Ownership data
+  - Per-game settings
+  - Game paks (active controller pak saves)
+  - Game pak backups
 - Import bundles with merge strategy selection
+- Backups are deduplicated on import by MD5 hash
 
 ### Labels Sync
 

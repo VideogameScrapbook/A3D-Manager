@@ -825,6 +825,9 @@ router.put('/:cartId', uploadImage.single('image'), async (req, res) => {
 
     await updateEntryInLabelsDb(cartIdNum, req.file.buffer);
 
+    // Invalidate sorted cache after updating
+    invalidateSortedCache();
+
     console.log(`Label for cartridge ${cartId} updated successfully`);
 
     res.json({

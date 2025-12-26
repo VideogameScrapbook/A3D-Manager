@@ -18,6 +18,11 @@ import path from 'path';
 import { Writable } from 'stream';
 import { getLabelsDbImage, updateLabelImage, addCartridge, getAllEntries, createEmptyLabelsDb } from './labels-db-core.js';
 import { findGameFolder } from './cartridge-settings.js';
+import {
+  getAllBackupsForExport,
+  importBackups,
+  type GamePakBackupsMetadata,
+} from './game-pak.js';
 
 // Paths
 const LOCAL_DIR = path.join(process.cwd(), '.local');
@@ -34,6 +39,7 @@ export interface BundleManifest {
     hasOwnedCarts: boolean;
     settingsCount: number;
     gamePaksCount: number;
+    gamePakBackupsCount: number;
     labelsCount?: number; // Individual label images (for selection exports)
     cartIds: string[];
   };
@@ -49,6 +55,7 @@ export interface BundleContents {
   };
   settings: Map<string, object>;
   gamePaks: Map<string, Buffer>;
+  gamePakBackups: Map<string, { metadata: GamePakBackupsMetadata; files: Map<string, Buffer> }>;
 }
 
 export type MergeStrategy = 'skip' | 'overwrite' | 'keep-both';
@@ -58,6 +65,7 @@ export interface ImportOptions {
   importOwnership: boolean;
   importSettings: boolean;
   importGamePaks: boolean;
+  importGamePakBackups: boolean;
   mergeStrategy: MergeStrategy;
 }
 
@@ -68,6 +76,7 @@ export interface ImportResult {
   ownershipMerged: { added: number; skipped: number };
   settingsImported: { added: number; skipped: number; overwritten: number };
   gamePaksImported: { added: number; skipped: number; overwritten: number };
+  gamePakBackupsImported: { added: number; skipped: number; merged: number };
   errors: string[];
 }
 
@@ -79,6 +88,7 @@ export async function createBundle(options: {
   includeOwnership?: boolean;
   includeSettings?: boolean;
   includeGamePaks?: boolean;
+  includeGamePakBackups?: boolean;
   cartIds?: string[]; // If provided, only include these carts' settings/paks
 }): Promise<Buffer> {
   const {
@@ -86,6 +96,7 @@ export async function createBundle(options: {
     includeOwnership = true,
     includeSettings = true,
     includeGamePaks = true,
+    includeGamePakBackups = true,
     cartIds: rawCartIds,
   } = options;
 
@@ -181,6 +192,17 @@ export async function createBundle(options: {
   }
   const hasOwnedCarts = ownedCartsData !== null;
 
+  // Collect game pak backups
+  let gamePakBackupsMap = new Map<string, { metadata: GamePakBackupsMetadata; files: Map<string, Buffer> }>();
+  let totalBackupsCount = 0;
+  if (includeGamePakBackups) {
+    gamePakBackupsMap = await getAllBackupsForExport(cartIds);
+    for (const [cartId, data] of gamePakBackupsMap) {
+      totalBackupsCount += data.metadata.backups.length;
+      allCartIds.add(cartId);
+    }
+  }
+
   // Create manifest
   const manifest: BundleManifest = {
     version: 1,
@@ -191,6 +213,7 @@ export async function createBundle(options: {
       hasOwnedCarts,
       settingsCount: settingsMap.size,
       gamePaksCount: gamePaksMap.size,
+      gamePakBackupsCount: totalBackupsCount,
       labelsCount: labelsMap.size,
       cartIds: Array.from(allCartIds).sort(),
     },
@@ -243,6 +266,18 @@ export async function createBundle(options: {
       archive.append(buffer, { name: `game-paks/${cartId}/controller_pak.img` });
     }
 
+    // Add game pak backups
+    for (const [cartId, data] of gamePakBackupsMap) {
+      // Add metadata
+      archive.append(JSON.stringify(data.metadata, null, 2), {
+        name: `game-pak-backups/${cartId}/metadata.json`,
+      });
+      // Add backup files
+      for (const [backupId, buffer] of data.files) {
+        archive.append(buffer, { name: `game-pak-backups/${cartId}/${backupId}.img` });
+      }
+    }
+
     archive.finalize();
   });
 }
@@ -260,6 +295,11 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
   const labels = new Map<string, Buffer>();
   const settings = new Map<string, object>();
   const gamePaks = new Map<string, Buffer>();
+  const gamePakBackups = new Map<string, { metadata: GamePakBackupsMetadata; files: Map<string, Buffer> }>();
+
+  // First pass: collect all entries
+  const backupMetadatas = new Map<string, GamePakBackupsMetadata>();
+  const backupFiles = new Map<string, Map<string, Buffer>>();
 
   for (const entry of entries) {
     const name = entry.entryName;
@@ -283,7 +323,27 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
     } else if (name.startsWith('game-paks/') && name.endsWith('/controller_pak.img')) {
       const cartId = name.split('/')[1];
       gamePaks.set(cartId, entry.getData());
+    } else if (name.startsWith('game-pak-backups/') && name.endsWith('/metadata.json')) {
+      // game-pak-backups/<cartId>/metadata.json
+      const cartId = name.split('/')[1].toLowerCase();
+      const content = entry.getData().toString('utf8');
+      backupMetadatas.set(cartId, JSON.parse(content) as GamePakBackupsMetadata);
+    } else if (name.startsWith('game-pak-backups/') && name.endsWith('.img')) {
+      // game-pak-backups/<cartId>/<backupId>.img
+      const parts = name.split('/');
+      const cartId = parts[1].toLowerCase();
+      const backupId = parts[2].slice(0, -4); // Remove '.img'
+      if (!backupFiles.has(cartId)) {
+        backupFiles.set(cartId, new Map());
+      }
+      backupFiles.get(cartId)!.set(backupId, entry.getData());
     }
+  }
+
+  // Combine backup metadata and files
+  for (const [cartId, metadata] of backupMetadatas) {
+    const files = backupFiles.get(cartId) || new Map();
+    gamePakBackups.set(cartId, { metadata, files });
   }
 
   if (!manifest) {
@@ -297,6 +357,7 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
     ownedCarts,
     settings,
     gamePaks,
+    gamePakBackups,
   };
 }
 
@@ -329,6 +390,7 @@ export async function importBundle(
     ownershipMerged: { added: 0, skipped: 0 },
     settingsImported: { added: 0, skipped: 0, overwritten: 0 },
     gamePaksImported: { added: 0, skipped: 0, overwritten: 0 },
+    gamePakBackupsImported: { added: 0, skipped: 0, merged: 0 },
     errors: [],
   };
 
@@ -475,6 +537,25 @@ export async function importBundle(
         } else {
           // keep-both - not really applicable for game paks, treat as skip
           result.gamePaksImported.skipped++;
+        }
+      }
+    }
+
+    // Import game pak backups
+    if (options.importGamePakBackups && bundle.gamePakBackups.size > 0) {
+      for (const [cartId, data] of bundle.gamePakBackups) {
+        try {
+          const backupResult = await importBackups(
+            cartId,
+            data.metadata,
+            data.files,
+            options.mergeStrategy === 'skip' ? 'skip' : 'merge'
+          );
+          result.gamePakBackupsImported.added += backupResult.added;
+          result.gamePakBackupsImported.skipped += backupResult.skipped;
+          result.gamePakBackupsImported.merged += backupResult.merged;
+        } catch (err) {
+          result.errors.push(`Failed to import backups for ${cartId}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
       }
     }

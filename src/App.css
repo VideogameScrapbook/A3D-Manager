@@ -927,9 +927,18 @@
   font-size: 0.95rem;
 }
 
+.scan-summary p {
+  margin: 0;
+}
+
+.scan-summary-hint {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
 .already-owned-note {
   color: var(--color-text-muted);
-  margin-left: 0.5rem;
 }
 
 .selection-controls {
@@ -1050,9 +1059,15 @@
 }
 
 .download-options h4 {
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.25rem 0;
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+.download-options-hint {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem 0;
 }
 
 .download-option {

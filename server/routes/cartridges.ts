@@ -33,6 +33,12 @@ import {
   deleteLocalGamePak,
   validateGamePak,
   CONTROLLER_PAK_SIZE,
+  listBackups,
+  createBackup,
+  getBackupBuffer,
+  updateBackup,
+  deleteBackup,
+  restoreBackup,
 } from '../lib/game-pak.js';
 
 import {
@@ -541,17 +547,23 @@ router.delete('/:cartId/settings', async (req, res) => {
 /**
  * GET /api/cartridges/:cartId/game-pak
  * Get game pak info
+ * Query params:
+ *   - sdCardPath: path to SD card
+ *   - includeHash: if 'true', include MD5 hashes and sync status
  */
 router.get('/:cartId/game-pak', async (req, res) => {
   const { cartId } = req.params;
-  const { sdCardPath } = req.query;
+  const { sdCardPath, includeHash } = req.query;
 
   if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
     return res.status(400).json({ error: 'Invalid cart ID format' });
   }
 
   try {
-    const info = await getGamePakInfo(cartId, sdCardPath as string | undefined);
+    const info = await getGamePakInfo(cartId, {
+      sdCardPath: sdCardPath as string | undefined,
+      includeHash: includeHash === 'true',
+    });
     res.json(info);
   } catch (error) {
     console.error('Error getting game pak info:', error);
@@ -705,6 +717,155 @@ router.delete('/:cartId/game-pak', async (req, res) => {
 });
 
 // =============================================================================
+// Game Pak Backup Routes
+// =============================================================================
+
+/**
+ * GET /api/cartridges/:cartId/game-pak/backups
+ * List all backups for a cartridge
+ */
+router.get('/:cartId/game-pak/backups', async (req, res) => {
+  const { cartId } = req.params;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const backups = await listBackups(cartId);
+    res.json({ backups });
+  } catch (error) {
+    console.error('Error listing backups:', error);
+    res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+/**
+ * POST /api/cartridges/:cartId/game-pak/backups
+ * Create a new backup from current local game pak
+ */
+router.post('/:cartId/game-pak/backups', async (req, res) => {
+  const { cartId } = req.params;
+  const { name, description } = req.body;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const backup = await createBackup(cartId, name, description);
+    res.json({ success: true, backup });
+  } catch (error) {
+    console.error('Error creating backup:', error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Failed to create backup',
+    });
+  }
+});
+
+/**
+ * GET /api/cartridges/:cartId/game-pak/backups/:backupId
+ * Download a specific backup as .img file
+ */
+router.get('/:cartId/game-pak/backups/:backupId', async (req, res) => {
+  const { cartId, backupId } = req.params;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const buffer = await getBackupBuffer(cartId, backupId);
+    if (!buffer) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="backup-${backupId}.img"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error downloading backup:', error);
+    res.status(500).json({ error: 'Failed to download backup' });
+  }
+});
+
+/**
+ * PUT /api/cartridges/:cartId/game-pak/backups/:backupId
+ * Update backup name/description
+ */
+router.put('/:cartId/game-pak/backups/:backupId', async (req, res) => {
+  const { cartId, backupId } = req.params;
+  const { name, description } = req.body;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const backup = await updateBackup(cartId, backupId, { name, description });
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+    res.json({ success: true, backup });
+  } catch (error) {
+    console.error('Error updating backup:', error);
+    res.status(500).json({ error: 'Failed to update backup' });
+  }
+});
+
+/**
+ * DELETE /api/cartridges/:cartId/game-pak/backups/:backupId
+ * Delete a backup
+ */
+router.delete('/:cartId/game-pak/backups/:backupId', async (req, res) => {
+  const { cartId, backupId } = req.params;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const deleted = await deleteBackup(cartId, backupId);
+    res.json({ success: deleted });
+  } catch (error) {
+    console.error('Error deleting backup:', error);
+    res.status(500).json({ error: 'Failed to delete backup' });
+  }
+});
+
+/**
+ * POST /api/cartridges/:cartId/game-pak/backups/:backupId/restore
+ * Restore a backup to local (and optionally SD card)
+ */
+router.post('/:cartId/game-pak/backups/:backupId/restore', async (req, res) => {
+  const { cartId, backupId } = req.params;
+  const { syncToSD, sdCardPath, title } = req.body;
+
+  if (!/^[0-9a-fA-F]{8}$/.test(cartId)) {
+    return res.status(400).json({ error: 'Invalid cart ID format' });
+  }
+
+  try {
+    const result = await restoreBackup(
+      cartId,
+      backupId,
+      title || 'Unknown Cartridge',
+      syncToSD ? sdCardPath : undefined
+    );
+    res.json({
+      success: true,
+      restoredToLocal: result.local,
+      restoredToSD: result.sd,
+    });
+  } catch (error) {
+    console.error('Error restoring backup:', error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Failed to restore backup',
+    });
+  }
+});
+
+// =============================================================================
 // Bundle Export/Import Routes
 // =============================================================================
 
@@ -821,6 +982,7 @@ router.post('/bundle/import', bundleUpload.single('file'), async (req, res) => {
         importOwnership: true,
         importSettings: true,
         importGamePaks: true,
+        importGamePakBackups: true,
         mergeStrategy: 'skip',
       };
     }
@@ -831,6 +993,7 @@ router.post('/bundle/import', bundleUpload.single('file'), async (req, res) => {
       importOwnership: options.importOwnership ?? true,
       importSettings: options.importSettings ?? true,
       importGamePaks: options.importGamePaks ?? true,
+      importGamePakBackups: options.importGamePakBackups ?? true,
       mergeStrategy: options.mergeStrategy ?? 'skip',
     };
 

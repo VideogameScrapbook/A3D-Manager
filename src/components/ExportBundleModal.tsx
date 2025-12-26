@@ -18,6 +18,7 @@ export function ExportBundleModal({
   const [includeOwnership, setIncludeOwnership] = useState(true);
   const [includeSettings, setIncludeSettings] = useState(true);
   const [includeGamePaks, setIncludeGamePaks] = useState(true);
+  const [includeGamePakBackups, setIncludeGamePakBackups] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export function ExportBundleModal({
       setIncludeOwnership(true);
       setIncludeSettings(true);
       setIncludeGamePaks(true);
+      setIncludeGamePakBackups(true);
       setError(null);
     }
   }, [isOpen]);
@@ -44,6 +46,7 @@ export function ExportBundleModal({
         includeOwnership,
         includeSettings,
         includeGamePaks,
+        includeGamePakBackups,
         ...(isSelectionExport && { cartIds: selectedCartIds }),
       };
 
@@ -97,7 +100,7 @@ export function ExportBundleModal({
           <Button
             variant="primary"
             onClick={handleExport}
-            disabled={exporting || (!includeLabels && !includeOwnership && !includeSettings && !includeGamePaks)}
+            disabled={exporting || (!includeLabels && !includeOwnership && !includeSettings && !includeGamePaks && !includeGamePakBackups)}
             loading={exporting}
           >
             Export
@@ -164,6 +167,24 @@ export function ExportBundleModal({
               {isSelectionExport
                 ? 'Controller pak save data for selected cartridges'
                 : 'Controller pak save data'
+              }
+            </span>
+          </div>
+        </label>
+
+        <label className="export-option">
+          <input
+            type="checkbox"
+            checked={includeGamePakBackups}
+            onChange={(e) => setIncludeGamePakBackups(e.target.checked)}
+            disabled={exporting}
+          />
+          <div className="option-content">
+            <span className="option-label">Game Pak Backups</span>
+            <span className="option-desc">
+              {isSelectionExport
+                ? 'Backup saves for selected cartridges'
+                : 'All backed up game pak saves'
               }
             </span>
           </div>

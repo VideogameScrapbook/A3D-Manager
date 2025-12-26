@@ -78,21 +78,21 @@ export function CartridgesEmptyState({
         <div className={`empty-state-card ${!isConnected || !hasGamesOnSD ? 'disabled' : ''}`}>
           <div className="card-icon">📂</div>
           <div className="card-content">
-            <h3>Import Games from SD Card</h3>
+            <h3>Import Owned from SD Card</h3>
             <p>
-              Scan your SD card and import your existing game collection. This will mark games as
-              owned, download their settings and game pak files, but won't import label artwork.
+              Scan your SD card and mark your existing cartridges as owned. Optionally download
+              their settings and game pak files. This won't import label artwork.
             </p>
             {isConnected && hasGamesOnSD && (
               <p className="card-meta">
-                {sdStatus.games?.gameCount} games found on SD card
+                {sdStatus.games?.gameCount} cartridges found on SD card
               </p>
             )}
             {isConnected && !hasGamesOnSD && !loading && (
-              <p className="card-meta muted">No games found on SD card</p>
+              <p className="card-meta muted">No cartridges found on SD card</p>
             )}
             {!isConnected && (
-              <p className="card-meta muted">Connect your SD card to import games</p>
+              <p className="card-meta muted">Connect your SD card to import</p>
             )}
           </div>
           <button
@@ -100,7 +100,7 @@ export function CartridgesEmptyState({
             onClick={onImportFromSD}
             disabled={!isConnected || !hasGamesOnSD}
           >
-            Scan SD Card
+            Import Owned from SD
           </button>
         </div>
 
@@ -141,16 +141,14 @@ export function CartridgesEmptyState({
             <h3>Import labels.db File</h3>
             <p>
               Import a labels.db file from your computer. Great for restoring a backup or using
-              a community-shared collection.
-            </p>
-            <p className="card-meta">
+              community artwork collections like{' '}
               <a
                 href="https://github.com/retrogamecorps/Analogue-3D-Images"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Browse community labels &rarr;
-              </a>
+                Retro Game Corps
+              </a>.
             </p>
           </div>
           <button className="btn-secondary" onClick={onImportLabelsDb}>

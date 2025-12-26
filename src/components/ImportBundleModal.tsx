@@ -10,6 +10,7 @@ interface BundleManifest {
     hasOwnedCarts: boolean;
     settingsCount: number;
     gamePaksCount: number;
+    gamePakBackupsCount: number;
     cartIds: string[];
   };
 }
@@ -20,6 +21,7 @@ interface ImportResult {
   ownershipMerged: { added: number; skipped: number };
   settingsImported: { added: number; skipped: number; overwritten: number };
   gamePaksImported: { added: number; skipped: number; overwritten: number };
+  gamePakBackupsImported: { added: number; skipped: number; merged: number };
   errors: string[];
 }
 
@@ -49,6 +51,7 @@ export function ImportBundleModal({
   const [importOwnership, setImportOwnership] = useState(true);
   const [importSettings, setImportSettings] = useState(true);
   const [importGamePaks, setImportGamePaks] = useState(true);
+  const [importGamePakBackups, setImportGamePakBackups] = useState(true);
   const [mergeStrategy, setMergeStrategy] = useState<MergeStrategy>('skip');
   const [dragActive, setDragActive] = useState(false);
 
@@ -64,6 +67,7 @@ export function ImportBundleModal({
       setImportOwnership(true);
       setImportSettings(true);
       setImportGamePaks(true);
+      setImportGamePakBackups(true);
       setMergeStrategy('skip');
     }
   }, [isOpen]);
@@ -97,6 +101,7 @@ export function ImportBundleModal({
       setImportOwnership(info.contents.hasOwnedCarts);
       setImportSettings(info.contents.settingsCount > 0);
       setImportGamePaks(info.contents.gamePaksCount > 0);
+      setImportGamePakBackups(info.contents.gamePakBackupsCount > 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read bundle');
     } finally {
@@ -119,6 +124,7 @@ export function ImportBundleModal({
         importOwnership,
         importSettings,
         importGamePaks,
+        importGamePakBackups,
         mergeStrategy,
       }));
 
@@ -166,7 +172,7 @@ export function ImportBundleModal({
             <Button
               variant="primary"
               onClick={handleImport}
-              disabled={importing || (!importLabels && !importOwnership && !importSettings && !importGamePaks)}
+              disabled={importing || (!importLabels && !importOwnership && !importSettings && !importGamePaks && !importGamePakBackups)}
               loading={importing}
             >
               Import
@@ -225,6 +231,13 @@ export function ImportBundleModal({
                 {result.gamePaksImported.skipped > 0 && `, ${result.gamePaksImported.skipped} skipped`}
               </div>
             )}
+            {(result.gamePakBackupsImported.added > 0 || result.gamePakBackupsImported.skipped > 0 || result.gamePakBackupsImported.merged > 0) && (
+              <div className="result-item">
+                Game Pak Backups: {result.gamePakBackupsImported.added} added
+                {result.gamePakBackupsImported.merged > 0 && `, ${result.gamePakBackupsImported.merged} merged`}
+                {result.gamePakBackupsImported.skipped > 0 && `, ${result.gamePakBackupsImported.skipped} skipped`}
+              </div>
+            )}
           </div>
 
           {result.errors.length > 0 && (
@@ -266,6 +279,12 @@ export function ImportBundleModal({
                 <div className="detail-row">
                   <span>Game Paks:</span>
                   <span>{manifest.contents.gamePaksCount} saves</span>
+                </div>
+              )}
+              {manifest.contents.gamePakBackupsCount > 0 && (
+                <div className="detail-row">
+                  <span>Game Pak Backups:</span>
+                  <span>{manifest.contents.gamePakBackupsCount} backups</span>
                 </div>
               )}
             </div>
@@ -312,6 +331,16 @@ export function ImportBundleModal({
                 disabled={importing || manifest.contents.gamePaksCount === 0}
               />
               <span>Game Paks ({manifest.contents.gamePaksCount})</span>
+            </label>
+
+            <label className={`import-option ${manifest.contents.gamePakBackupsCount === 0 ? 'disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={importGamePakBackups}
+                onChange={(e) => setImportGamePakBackups(e.target.checked)}
+                disabled={importing || manifest.contents.gamePakBackupsCount === 0}
+              />
+              <span>Game Pak Backups ({manifest.contents.gamePakBackupsCount})</span>
             </label>
           </div>
 

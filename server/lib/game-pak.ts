@@ -1,6 +1,7 @@
 import { readFile, writeFile, stat, copyFile, unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { createHash, randomUUID } from 'crypto';
 import { findGameFolder, ensureLocalGameFolder, getLocalGamesDir } from './cartridge-settings.js';
 
 // =============================================================================
@@ -24,6 +25,11 @@ export const CONTROLLER_PAK_PAGE_COUNT = 123;
 
 export const GAME_PAK_FILENAME = 'controller_pak.img';
 
+/**
+ * Directory for game pak backups (separate from the active game paks)
+ */
+export const GAME_PAK_BACKUPS_DIR = path.join(process.cwd(), '.local', 'Library', 'N64', 'GamePakBackups');
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -42,6 +48,29 @@ export interface GamePakInfo {
   lastModified?: string;
   isValidSize?: boolean;
   saveInfo?: GamePakSaveDetails;
+  md5Hash?: string;
+}
+
+export interface GamePakSyncStatus {
+  localHash: string | null;
+  sdHash: string | null;
+  inSync: boolean;
+  hasConflict: boolean;
+}
+
+export interface GamePakBackup {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  md5Hash: string;
+  size: number;
+}
+
+export interface GamePakBackupsMetadata {
+  version: 1;
+  cartId: string;
+  backups: GamePakBackup[];
 }
 
 // =============================================================================
@@ -117,16 +146,88 @@ export async function validateGamePakFile(filePath: string): Promise<{ valid: bo
 }
 
 // =============================================================================
+// Hash & Sync
+// =============================================================================
+
+/**
+ * Compute MD5 hash of a game pak buffer
+ */
+export function computeGamePakHash(buffer: Buffer): string {
+  return createHash('md5').update(buffer).digest('hex');
+}
+
+/**
+ * Get sync status between local and SD card game paks
+ */
+export async function getGamePakSyncStatus(
+  cartId: string,
+  sdCardPath?: string
+): Promise<GamePakSyncStatus> {
+  let localHash: string | null = null;
+  let sdHash: string | null = null;
+
+  // Get local hash
+  const localPath = await getLocalGamePakPath(cartId);
+  if (localPath && existsSync(localPath)) {
+    try {
+      const buffer = await readFile(localPath);
+      if (buffer.length === CONTROLLER_PAK_SIZE) {
+        localHash = computeGamePakHash(buffer);
+      }
+    } catch {
+      // Ignore errors, hash stays null
+    }
+  }
+
+  // Get SD hash if path provided
+  if (sdCardPath) {
+    const sdPath = await getSDGamePakPath(sdCardPath, cartId);
+    if (sdPath && existsSync(sdPath)) {
+      try {
+        const buffer = await readFile(sdPath);
+        if (buffer.length === CONTROLLER_PAK_SIZE) {
+          sdHash = computeGamePakHash(buffer);
+        }
+      } catch {
+        // Ignore errors, hash stays null
+      }
+    }
+  }
+
+  // Determine sync status
+  const bothExist = localHash !== null && sdHash !== null;
+  const inSync = !bothExist || localHash === sdHash;
+  const hasConflict = bothExist && localHash !== sdHash;
+
+  return { localHash, sdHash, inSync, hasConflict };
+}
+
+// =============================================================================
 // Read Operations
 // =============================================================================
+
+export interface GamePakInfoOptions {
+  sdCardPath?: string;
+  includeHash?: boolean;
+}
+
+export interface GamePakInfoResult {
+  local: GamePakInfo;
+  sd: GamePakInfo | null;
+  syncStatus?: GamePakSyncStatus;
+}
 
 /**
  * Get game pak info for a cartridge (checks both local and SD)
  */
 export async function getGamePakInfo(
   cartId: string,
-  sdCardPath?: string
-): Promise<{ local: GamePakInfo; sd: GamePakInfo | null }> {
+  options: GamePakInfoOptions | string = {}
+): Promise<GamePakInfoResult> {
+  // Support legacy signature where second arg was just sdCardPath string
+  const opts: GamePakInfoOptions = typeof options === 'string' ? { sdCardPath: options } : options;
+  const { sdCardPath, includeHash = false } = opts;
+
   // Check local
   const localPath = await getLocalGamePakPath(cartId);
   const localInfo: GamePakInfo = {
@@ -135,6 +236,7 @@ export async function getGamePakInfo(
     path: localPath || '',
   };
 
+  let localBuffer: Buffer | null = null;
   if (localPath && existsSync(localPath)) {
     try {
       const stats = await stat(localPath);
@@ -145,8 +247,11 @@ export async function getGamePakInfo(
 
       // Include save info if valid size
       if (stats.size === CONTROLLER_PAK_SIZE) {
-        const buffer = await readFile(localPath);
-        localInfo.saveInfo = getGamePakSaveInfo(buffer);
+        localBuffer = await readFile(localPath);
+        localInfo.saveInfo = getGamePakSaveInfo(localBuffer);
+        if (includeHash) {
+          localInfo.md5Hash = computeGamePakHash(localBuffer);
+        }
       }
     } catch (error) {
       console.error('Error reading local game pak:', error);
@@ -155,6 +260,7 @@ export async function getGamePakInfo(
 
   // Check SD card if path provided
   let sdInfo: GamePakInfo | null = null;
+  let sdBuffer: Buffer | null = null;
   if (sdCardPath) {
     const sdPath = await getSDGamePakPath(sdCardPath, cartId);
     sdInfo = {
@@ -173,8 +279,11 @@ export async function getGamePakInfo(
 
         // Include save info if valid size
         if (stats.size === CONTROLLER_PAK_SIZE) {
-          const buffer = await readFile(sdPath);
-          sdInfo.saveInfo = getGamePakSaveInfo(buffer);
+          sdBuffer = await readFile(sdPath);
+          sdInfo.saveInfo = getGamePakSaveInfo(sdBuffer);
+          if (includeHash) {
+            sdInfo.md5Hash = computeGamePakHash(sdBuffer);
+          }
         }
       } catch (error) {
         console.error('Error reading SD game pak:', error);
@@ -182,7 +291,23 @@ export async function getGamePakInfo(
     }
   }
 
-  return { local: localInfo, sd: sdInfo };
+  // Build result with optional sync status
+  const result: GamePakInfoResult = { local: localInfo, sd: sdInfo };
+
+  if (includeHash) {
+    // Compute sync status from already-loaded hashes
+    const localHash = localInfo.md5Hash || null;
+    const sdHash = sdInfo?.md5Hash || null;
+    const bothExist = localHash !== null && sdHash !== null;
+    result.syncStatus = {
+      localHash,
+      sdHash,
+      inSync: !bothExist || localHash === sdHash,
+      hasConflict: bothExist && localHash !== sdHash,
+    };
+  }
+
+  return result;
 }
 
 /**
@@ -426,4 +551,340 @@ export function getGamePakSaveInfo(buffer: Buffer): {
   const percentUsed = Math.round((pagesUsed / totalUserPages) * 100);
 
   return { pagesUsed, pagesFree, percentUsed };
+}
+
+// =============================================================================
+// Backup Operations
+// =============================================================================
+
+const BACKUPS_METADATA_FILENAME = 'metadata.json';
+
+/**
+ * Get the backups directory for a cartridge
+ */
+export function getBackupsDir(cartId: string): string {
+  return path.join(GAME_PAK_BACKUPS_DIR, cartId.toLowerCase());
+}
+
+/**
+ * Get the metadata file path for a cartridge's backups
+ */
+function getBackupsMetadataPath(cartId: string): string {
+  return path.join(getBackupsDir(cartId), BACKUPS_METADATA_FILENAME);
+}
+
+/**
+ * Read backups metadata for a cartridge
+ */
+export async function getBackupsMetadata(cartId: string): Promise<GamePakBackupsMetadata | null> {
+  const metadataPath = getBackupsMetadataPath(cartId);
+
+  if (!existsSync(metadataPath)) {
+    return null;
+  }
+
+  try {
+    const content = await readFile(metadataPath, 'utf-8');
+    return JSON.parse(content) as GamePakBackupsMetadata;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save backups metadata for a cartridge
+ */
+export async function saveBackupsMetadata(cartId: string, metadata: GamePakBackupsMetadata): Promise<void> {
+  const backupsDir = getBackupsDir(cartId);
+  await mkdir(backupsDir, { recursive: true });
+
+  const metadataPath = getBackupsMetadataPath(cartId);
+  await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+}
+
+/**
+ * List all backups for a cartridge
+ */
+export async function listBackups(cartId: string): Promise<GamePakBackup[]> {
+  const metadata = await getBackupsMetadata(cartId);
+  return metadata?.backups || [];
+}
+
+/**
+ * Create a backup of the current local game pak
+ */
+export async function createBackup(
+  cartId: string,
+  name?: string,
+  description?: string
+): Promise<GamePakBackup> {
+  // Read the local game pak
+  const localBuffer = await readLocalGamePak(cartId);
+  if (!localBuffer) {
+    throw new Error('No local game pak to backup');
+  }
+
+  // Validate the buffer
+  const validation = validateGamePak(localBuffer);
+  if (!validation.valid) {
+    throw new Error(`Invalid game pak: ${validation.errors.join(', ')}`);
+  }
+
+  // Generate backup ID and hash
+  const id = randomUUID();
+  const md5Hash = computeGamePakHash(localBuffer);
+  const createdAt = new Date().toISOString();
+
+  // Create backup entry
+  const backup: GamePakBackup = {
+    id,
+    name: name || `Backup ${createdAt.split('T')[0]}`,
+    description,
+    createdAt,
+    md5Hash,
+    size: localBuffer.length,
+  };
+
+  // Ensure backups directory exists
+  const backupsDir = getBackupsDir(cartId);
+  await mkdir(backupsDir, { recursive: true });
+
+  // Write backup file
+  const backupPath = path.join(backupsDir, `${id}.img`);
+  await writeFile(backupPath, localBuffer);
+
+  // Update metadata
+  const metadata = await getBackupsMetadata(cartId) || {
+    version: 1 as const,
+    cartId: cartId.toLowerCase(),
+    backups: [],
+  };
+  metadata.backups.push(backup);
+  await saveBackupsMetadata(cartId, metadata);
+
+  return backup;
+}
+
+/**
+ * Get the buffer for a specific backup
+ */
+export async function getBackupBuffer(cartId: string, backupId: string): Promise<Buffer | null> {
+  const backupsDir = getBackupsDir(cartId);
+  const backupPath = path.join(backupsDir, `${backupId}.img`);
+
+  if (!existsSync(backupPath)) {
+    return null;
+  }
+
+  return readFile(backupPath);
+}
+
+/**
+ * Update a backup's name or description
+ */
+export async function updateBackup(
+  cartId: string,
+  backupId: string,
+  updates: { name?: string; description?: string }
+): Promise<GamePakBackup | null> {
+  const metadata = await getBackupsMetadata(cartId);
+  if (!metadata) {
+    return null;
+  }
+
+  const backupIndex = metadata.backups.findIndex(b => b.id === backupId);
+  if (backupIndex === -1) {
+    return null;
+  }
+
+  // Update fields
+  if (updates.name !== undefined) {
+    metadata.backups[backupIndex].name = updates.name;
+  }
+  if (updates.description !== undefined) {
+    metadata.backups[backupIndex].description = updates.description;
+  }
+
+  await saveBackupsMetadata(cartId, metadata);
+  return metadata.backups[backupIndex];
+}
+
+/**
+ * Delete a backup
+ */
+export async function deleteBackup(cartId: string, backupId: string): Promise<boolean> {
+  const metadata = await getBackupsMetadata(cartId);
+  if (!metadata) {
+    return false;
+  }
+
+  const backupIndex = metadata.backups.findIndex(b => b.id === backupId);
+  if (backupIndex === -1) {
+    return false;
+  }
+
+  // Remove from metadata
+  metadata.backups.splice(backupIndex, 1);
+  await saveBackupsMetadata(cartId, metadata);
+
+  // Delete the backup file
+  const backupsDir = getBackupsDir(cartId);
+  const backupPath = path.join(backupsDir, `${backupId}.img`);
+  if (existsSync(backupPath)) {
+    await unlink(backupPath);
+  }
+
+  return true;
+}
+
+/**
+ * Restore a backup to local storage (and optionally SD card)
+ */
+export async function restoreBackup(
+  cartId: string,
+  backupId: string,
+  title: string = 'Unknown Cartridge',
+  sdCardPath?: string
+): Promise<{ local: boolean; sd: boolean }> {
+  const backupBuffer = await getBackupBuffer(cartId, backupId);
+  if (!backupBuffer) {
+    throw new Error('Backup not found');
+  }
+
+  // Validate the backup
+  const validation = validateGamePak(backupBuffer);
+  if (!validation.valid) {
+    throw new Error(`Invalid backup: ${validation.errors.join(', ')}`);
+  }
+
+  // Restore to local
+  await saveLocalGamePak(cartId, backupBuffer, title);
+  const result = { local: true, sd: false };
+
+  // Optionally restore to SD card
+  if (sdCardPath) {
+    const sdResult = await uploadGamePakToSD(cartId, sdCardPath, title);
+    result.sd = sdResult.success;
+  }
+
+  return result;
+}
+
+/**
+ * Get all backups for export (used by bundle system)
+ */
+export async function getAllBackupsForExport(
+  cartIds?: string[]
+): Promise<Map<string, { metadata: GamePakBackupsMetadata; files: Map<string, Buffer> }>> {
+  const result = new Map<string, { metadata: GamePakBackupsMetadata; files: Map<string, Buffer> }>();
+
+  if (!existsSync(GAME_PAK_BACKUPS_DIR)) {
+    return result;
+  }
+
+  const { readdir } = await import('fs/promises');
+  const dirs = await readdir(GAME_PAK_BACKUPS_DIR);
+
+  for (const dir of dirs) {
+    // Filter by cartIds if provided
+    if (cartIds && !cartIds.includes(dir.toLowerCase())) {
+      continue;
+    }
+
+    const metadata = await getBackupsMetadata(dir);
+    if (!metadata || metadata.backups.length === 0) {
+      continue;
+    }
+
+    const files = new Map<string, Buffer>();
+    for (const backup of metadata.backups) {
+      const buffer = await getBackupBuffer(dir, backup.id);
+      if (buffer) {
+        files.set(backup.id, buffer);
+      }
+    }
+
+    if (files.size > 0) {
+      result.set(dir.toLowerCase(), { metadata, files });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Import backups (used by bundle system)
+ */
+export async function importBackups(
+  cartId: string,
+  importMetadata: GamePakBackupsMetadata,
+  files: Map<string, Buffer>,
+  mergeStrategy: 'skip' | 'merge' = 'merge'
+): Promise<{ added: number; skipped: number; merged: number }> {
+  const result = { added: 0, skipped: 0, merged: 0 };
+
+  // Get existing metadata
+  let existingMetadata = await getBackupsMetadata(cartId);
+  if (!existingMetadata) {
+    existingMetadata = {
+      version: 1,
+      cartId: cartId.toLowerCase(),
+      backups: [],
+    };
+  }
+
+  // Build a set of existing hashes for deduplication
+  const existingHashes = new Set(existingMetadata.backups.map(b => b.md5Hash));
+
+  // Process each backup from import
+  for (const backup of importMetadata.backups) {
+    const buffer = files.get(backup.id);
+    if (!buffer) {
+      result.skipped++;
+      continue;
+    }
+
+    // Check for duplicate by hash
+    if (existingHashes.has(backup.md5Hash)) {
+      if (mergeStrategy === 'skip') {
+        result.skipped++;
+        continue;
+      }
+      // For merge, we still skip if hash matches (no point in duplicate data)
+      result.merged++;
+      continue;
+    }
+
+    // Validate the buffer
+    const validation = validateGamePak(buffer);
+    if (!validation.valid) {
+      result.skipped++;
+      continue;
+    }
+
+    // Generate new ID to avoid conflicts
+    const newId = randomUUID();
+    const newBackup: GamePakBackup = {
+      ...backup,
+      id: newId,
+    };
+
+    // Ensure backups directory exists
+    const backupsDir = getBackupsDir(cartId);
+    await mkdir(backupsDir, { recursive: true });
+
+    // Write backup file
+    const backupPath = path.join(backupsDir, `${newId}.img`);
+    await writeFile(backupPath, buffer);
+
+    // Add to metadata
+    existingMetadata.backups.push(newBackup);
+    existingHashes.add(backup.md5Hash);
+    result.added++;
+  }
+
+  // Save updated metadata
+  await saveBackupsMetadata(cartId, existingMetadata);
+
+  return result;
 }

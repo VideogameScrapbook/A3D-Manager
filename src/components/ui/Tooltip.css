@@ -2,14 +2,13 @@
    Tooltip Component Styles
    ============================================================================ */
 
-.tooltip-wrapper {
-  position: relative;
+.tooltip-trigger {
   display: inline-flex;
 }
 
-.tooltip-wrapper::after {
-  content: attr(data-tooltip);
-  position: absolute;
+/* Tooltip content (rendered via portal) */
+.tooltip-content {
+  position: fixed;
   width: max-content;
   max-width: 280px;
   padding: 0.625rem 0.75rem;
@@ -20,44 +19,9 @@
   font-size: 0.8rem;
   line-height: 1.5;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s, visibility 0.15s;
   pointer-events: none;
-  z-index: 1000;
-}
-
-.tooltip-wrapper:hover::after {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Position: Top (default) */
-.tooltip-wrapper--top::after {
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Position: Bottom */
-.tooltip-wrapper--bottom::after {
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Position: Left */
-.tooltip-wrapper--left::after {
-  right: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-/* Position: Right */
-.tooltip-wrapper--right::after {
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
+  z-index: 10000;
+  transition: opacity 0.15s;
 }
 
 /* Tooltip Icon */

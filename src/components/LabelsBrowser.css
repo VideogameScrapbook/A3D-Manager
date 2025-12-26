@@ -332,6 +332,9 @@
   padding: 0 0.75rem;
   height: 36px;
   color: var(--color-text-muted);
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
 }
 
 .filter-clear-btn:hover {

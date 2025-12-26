@@ -210,7 +210,7 @@ export function ImportFromSDModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Import from SD Card"
+      title="Import Owned Cartridges from SD"
       size="lg"
       className="import-sd-modal"
       footer={
@@ -224,7 +224,7 @@ export function ImportFromSDModal({
             disabled={importing || selectedIds.size === 0 || !scanResult}
             loading={importing}
           >
-            Import {selectedIds.size} Cartridges
+            Mark {selectedIds.size} as Owned
           </Button>
         </>
       }
@@ -245,12 +245,17 @@ export function ImportFromSDModal({
         <>
           {/* Summary */}
           <div className="scan-summary">
-            Found <strong>{scanResult.summary.total}</strong> cartridges on SD card
-            {scanResult.summary.alreadyOwned > 0 && (
-              <span className="already-owned-note">
-                ({scanResult.summary.alreadyOwned} already marked as owned)
-              </span>
-            )}
+            <p>
+              Found <strong>{scanResult.summary.total}</strong> cartridges on SD card.
+              {scanResult.summary.alreadyOwned > 0 && (
+                <span className="already-owned-note">
+                  {' '}({scanResult.summary.alreadyOwned} already marked as owned)
+                </span>
+              )}
+            </p>
+            <p className="scan-summary-hint">
+              Select cartridges below to mark them as owned in your collection.
+            </p>
           </div>
 
           {/* Selection Controls */}
@@ -296,31 +301,40 @@ export function ImportFromSDModal({
           </div>
 
           {/* Download Options */}
-          <div className="download-options">
-            <h4>Also download to local storage:</h4>
-            <label className="download-option">
-              <input
-                type="checkbox"
-                checked={downloadSettings}
-                onChange={(e) => setDownloadSettings(e.target.checked)}
-                disabled={importing || selectedWithSettings === 0}
-              />
-              <span>
-                Settings ({selectedWithSettings} available)
-              </span>
-            </label>
-            <label className="download-option">
-              <input
-                type="checkbox"
-                checked={downloadGamePaks}
-                onChange={(e) => setDownloadGamePaks(e.target.checked)}
-                disabled={importing || selectedWithGamePaks === 0}
-              />
-              <span>
-                Game Paks ({selectedWithGamePaks} available)
-              </span>
-            </label>
-          </div>
+          {(selectedWithSettings > 0 || selectedWithGamePaks > 0) && (
+            <div className="download-options">
+              <h4>Optional: Also copy data to local storage</h4>
+              <p className="download-options-hint">
+                Back up settings and save data from your SD card.
+              </p>
+              {selectedWithSettings > 0 && (
+                <label className="download-option">
+                  <input
+                    type="checkbox"
+                    checked={downloadSettings}
+                    onChange={(e) => setDownloadSettings(e.target.checked)}
+                    disabled={importing}
+                  />
+                  <span>
+                    Settings ({selectedWithSettings} available)
+                  </span>
+                </label>
+              )}
+              {selectedWithGamePaks > 0 && (
+                <label className="download-option">
+                  <input
+                    type="checkbox"
+                    checked={downloadGamePaks}
+                    onChange={(e) => setDownloadGamePaks(e.target.checked)}
+                    disabled={importing}
+                  />
+                  <span>
+                    Game Paks ({selectedWithGamePaks} available)
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Progress */}
           {progress && (
@@ -328,9 +342,9 @@ export function ImportFromSDModal({
               {progress.step === 'ownership' && (
                 <div className="progress-step">
                   {progress.status === 'completed' ? (
-                    <p>Marked {progress.added} cartridges as owned</p>
+                    <p>Added {progress.added} cartridges to your collection{progress.skipped ? ` (${progress.skipped} already owned)` : ''}</p>
                   ) : (
-                    <p>Marking cartridges as owned...</p>
+                    <p>Adding cartridges to your collection...</p>
                   )}
                 </div>
               )}

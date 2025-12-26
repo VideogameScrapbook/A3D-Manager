@@ -44,8 +44,3 @@ export function Button({
     </button>
   );
 }
-
-// Icon button for toolbar-style buttons
-export function IconButton(props: Omit<ButtonProps, 'icon'>) {
-  return <Button icon {...props} />;
-}

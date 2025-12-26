@@ -132,32 +132,6 @@ export function flushPendingSaves(): void {
 }
 
 /**
- * Cancel a pending save for a cartridge.
- * The settings will not be saved.
- */
-export function cancelPendingSave(cartId: string): void {
-  const pending = pendingSaves.get(cartId);
-  if (pending) {
-    window.clearTimeout(pending.timeoutId);
-    pendingSaves.delete(cartId);
-  }
-}
-
-/**
- * Check if a cartridge has a pending save.
- */
-export function hasPendingSave(cartId: string): boolean {
-  return pendingSaves.has(cartId);
-}
-
-/**
- * Get all cartridge IDs with pending saves.
- */
-export function getPendingSaveIds(): string[] {
-  return Array.from(pendingSaves.keys());
-}
-
-/**
  * Subscribe to save status changes.
  * Returns an unsubscribe function.
  */

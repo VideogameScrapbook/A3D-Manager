@@ -94,8 +94,12 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCartIds, setSelectedCartIds] = useState<Set<string>>(new Set());
 
+  // Unowned cartridges indicator
+  const [unownedOnSDCount, setUnownedOnSDCount] = useState(0);
+
   const pageSize = 48;
   const hasActiveFilters = regionFilter || languageFilter || videoModeFilter || searchQuery || ownedFilter;
+  const hasClearableFilters = regionFilter || languageFilter || videoModeFilter || searchQuery;
 
   // Update URL when filters or page change
   const updateURL = useCallback((
@@ -197,9 +201,39 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
     }
   }, [regionFilter, languageFilter, videoModeFilter, searchQuery, ownedFilter]);
 
+  // Check for unowned cartridges on SD card
+  const checkUnownedOnSD = useCallback(async () => {
+    if (!sdCardPath) {
+      setUnownedOnSDCount(0);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/cartridges/owned/import-from-sd/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdCardPath }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const unownedCount = result.summary.total - result.summary.alreadyOwned;
+        setUnownedOnSDCount(unownedCount);
+      }
+    } catch {
+      // Silently fail - indicator just won't show
+    }
+  }, [sdCardPath]);
+
+  // Run check on mount and when SD card changes
+  useEffect(() => {
+    checkUnownedOnSD();
+  }, [checkUnownedOnSD]);
+
   const handleRefresh = async () => {
     await fetchStatus();
     await fetchPage(0);
+    await checkUnownedOnSD();
   };
 
   const clearAllFilters = () => {
@@ -207,8 +241,8 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
     setLanguageFilter('');
     setVideoModeFilter('');
     setSearchQuery('');
-    setOwnedFilter(false);
-    updateURL(0, {});
+    // Preserve ownedFilter - it's not a "clearable" filter
+    updateURL(0, { owned: ownedFilter });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -297,6 +331,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
     if (refreshKey === undefined || refreshKey === 0) return;
     fetchPage(page);
     setLocalCacheBuster(Date.now());
+    checkUnownedOnSD();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
@@ -331,8 +366,9 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
             
             <div className="labels-header-actions">
               {!!sdCardPath && hasLabels && (
-                <Button variant="secondary" size="sm" onClick={() => setShowImportFromSDModal(true)}>
-                  Import from SD
+                <Button variant="secondary" size="sm" onClick={() => setShowImportFromSDModal(true)} className={unownedOnSDCount > 0 ? 'has-indicator' : ''}>
+                  Import Owned from SD
+                  {unownedOnSDCount > 0 && <span className="btn-badge">{unownedOnSDCount}</span>}
                 </Button>
               )}
               {hasLabels && (
@@ -453,7 +489,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
               </>
             )}
 
-            {hasActiveFilters && (
+            {hasClearableFilters && (
               <button
                 className="btn-ghost filter-clear-btn"
                 onClick={clearAllFilters}
