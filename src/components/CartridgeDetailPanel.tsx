@@ -20,6 +20,7 @@ import {
   type CleanModeSettings,
   type DisplayCatalog,
   type CartridgeSettings,
+  type HardwareSettings,
 } from '../lib/defaultSettings';
 import './CartridgeDetailPanel.css';
 
@@ -912,7 +913,7 @@ type SettingsEditorTab = 'display' | 'hardware';
 function SettingsEditor({ cartId, settings: initialSettings, sdCardPath }: SettingsEditorProps) {
   const [activeTab, setActiveTab] = useState<SettingsEditorTab>('display');
   const [settings, setSettings] = useState<CartridgeSettings>(initialSettings);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+  const [_saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   // Track the initial settings JSON to detect actual changes
@@ -1228,7 +1229,8 @@ interface GamePakTabProps {
   sdCardPath?: string;
 }
 
-function GamePakTab({ cartId, sdCardPath }: GamePakTabProps) {
+// Prepared for future use
+export function GamePakTab({ cartId, sdCardPath }: GamePakTabProps) {
   const [info, setInfo] = useState<GamePakInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

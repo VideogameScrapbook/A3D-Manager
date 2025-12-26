@@ -23,14 +23,28 @@ tests/
 ├── labels-db/
 │   ├── tests.ts            # Labels database tests
 │   ├── fixtures/           # Test images and data
+│   ├── scripts/            # Fixture generation scripts
 │   └── output/             # Generated output (gitignored)
-└── file-transfer/
-    ├── tests.ts            # File transfer tests
-    └── output/             # Generated output (gitignored)
+├── file-transfer/
+│   ├── tests.ts            # File transfer tests
+│   └── output/             # Generated output (gitignored)
+├── cartridge-data/
+│   ├── tests.ts            # Cartridge data tests
+│   └── output/             # Generated output (gitignored)
+└── game-data/
+    └── fixtures/           # Shared fixtures (settings.json, controller_pak.img)
 
 server/lib/
 ├── labels-db-core.ts       # Labels database operations
-└── file-transfer.ts        # Progress-enabled file operations
+├── labels-db-sync.ts       # SD card sync logic
+├── labels-db-compare.ts    # Database comparison
+├── file-transfer.ts        # Progress-enabled file operations
+├── owned-carts.ts          # Ownership tracking
+├── cartridge-settings.ts   # Settings parsing/validation
+├── game-pak.ts             # Controller pak operations
+├── sd-card.ts              # SD card detection
+├── bundle-archive.ts       # Asset bundle handling
+└── tga.ts                  # TGA image format
 ```
 
 ## Adding New Tests
@@ -93,6 +107,18 @@ Tests for the progress-enabled file transfer library used by SD card sync.
 | Single File Copy | 4 | File copying, progress callbacks, speed/ETA, directory creation |
 | Directory Copy | 3 | Structure copying, batch progress, byte tracking |
 | Edge Cases | 2 | Empty files and empty directories |
+
+---
+
+## Cartridge Data Tests (28 tests)
+
+Tests for cartridge ownership tracking, settings parsing, and game pak operations.
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| Owned Carts | 5 | Load/save round-trip, duplicate handling, ID normalization, version validation |
+| Settings | 12 | parseSettings, validateSettings, hardware/display extraction, defaults |
+| Game Pak | 11 | 32KB size validation, empty pak creation, header structure, page tracking |
 
 ---
 

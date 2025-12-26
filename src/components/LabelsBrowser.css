@@ -8,9 +8,14 @@
 
 .labels-header {
   display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+}
+
+.labels-header-top {
+  display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
 }
 
 .labels-header h2 {
@@ -21,10 +26,15 @@
   color: var(--color-text);
 }
 
-.label-count {
+.labels-header-actions {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.label-count {
+  display: block;
+  margin-top: 0;
 }
 
 .dataset-info-trigger {

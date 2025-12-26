@@ -16,13 +16,14 @@ import { existsSync } from 'fs';
 import { readFile, readdir, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { Writable } from 'stream';
+import { getLabelsDbImage, updateLabelImage, addCartridge, getAllEntries, createEmptyLabelsDb } from './labels-db-core.js';
+import { findGameFolder } from './cartridge-settings.js';
 
 // Paths
 const LOCAL_DIR = path.join(process.cwd(), '.local');
 const LABELS_DB_PATH = path.join(LOCAL_DIR, 'labels.db');
 const OWNED_CARTS_PATH = path.join(LOCAL_DIR, 'owned-carts.json');
-const SETTINGS_DIR = path.join(LOCAL_DIR, 'settings');
-const GAME_PAKS_DIR = path.join(LOCAL_DIR, 'game-paks');
+const LOCAL_GAMES_DIR = path.join(LOCAL_DIR, 'Library', 'N64', 'Games');
 
 export interface BundleManifest {
   version: 1;
@@ -33,6 +34,7 @@ export interface BundleManifest {
     hasOwnedCarts: boolean;
     settingsCount: number;
     gamePaksCount: number;
+    labelsCount?: number; // Individual label images (for selection exports)
     cartIds: string[];
   };
 }
@@ -40,6 +42,7 @@ export interface BundleManifest {
 export interface BundleContents {
   manifest: BundleManifest;
   labelsDb?: Buffer;
+  labels: Map<string, Buffer>; // Individual label images (cartId -> PNG buffer)
   ownedCarts?: {
     version: number;
     cartridges: Array<{ cartId: string; addedAt: string; source: string }>;
@@ -61,6 +64,7 @@ export interface ImportOptions {
 export interface ImportResult {
   success: boolean;
   labelsImported: boolean;
+  individualLabelsImported: { added: number; updated: number; skipped: number };
   ownershipMerged: { added: number; skipped: number };
   settingsImported: { added: number; skipped: number; overwritten: number };
   gamePaksImported: { added: number; skipped: number; overwritten: number };
@@ -82,43 +86,100 @@ export async function createBundle(options: {
     includeOwnership = true,
     includeSettings = true,
     includeGamePaks = true,
-    cartIds,
+    cartIds: rawCartIds,
   } = options;
+
+  // Normalize cartIds to lowercase for consistent comparison
+  const cartIds = rawCartIds?.map(id => id.toLowerCase());
 
   // Collect data
   const settingsMap = new Map<string, Buffer>();
   const gamePaksMap = new Map<string, Buffer>();
+  const labelsMap = new Map<string, Buffer>(); // Individual label images
   const allCartIds = new Set<string>();
 
-  // Collect settings
-  if (includeSettings && existsSync(SETTINGS_DIR)) {
-    const settingsDirs = await readdir(SETTINGS_DIR);
-    for (const cartId of settingsDirs) {
-      if (cartIds && !cartIds.includes(cartId.toLowerCase())) continue;
-      const settingsPath = path.join(SETTINGS_DIR, cartId, 'settings.json');
-      if (existsSync(settingsPath)) {
-        settingsMap.set(cartId, await readFile(settingsPath));
-        allCartIds.add(cartId.toLowerCase());
+  // Collect settings and game paks from game folders
+  if ((includeSettings || includeGamePaks) && existsSync(LOCAL_GAMES_DIR)) {
+    const gameFolders = await readdir(LOCAL_GAMES_DIR);
+
+    for (const folder of gameFolders) {
+      // Extract cart ID from folder name (e.g., "Mario Kart 64 03cc04ee" -> "03cc04ee")
+      const match = folder.match(/([0-9a-fA-F]{8})$/);
+      if (!match) continue;
+
+      const cartId = match[1].toLowerCase();
+      if (cartIds && !cartIds.includes(cartId)) continue;
+
+      const folderPath = path.join(LOCAL_GAMES_DIR, folder);
+
+      // Collect settings
+      if (includeSettings) {
+        const settingsPath = path.join(folderPath, 'settings.json');
+        if (existsSync(settingsPath)) {
+          settingsMap.set(cartId, await readFile(settingsPath));
+          allCartIds.add(cartId);
+        }
+      }
+
+      // Collect game paks
+      if (includeGamePaks) {
+        const pakPath = path.join(folderPath, 'controller_pak.img');
+        if (existsSync(pakPath)) {
+          gamePaksMap.set(cartId, await readFile(pakPath));
+          allCartIds.add(cartId);
+        }
       }
     }
   }
 
-  // Collect game paks
-  if (includeGamePaks && existsSync(GAME_PAKS_DIR)) {
-    const pakDirs = await readdir(GAME_PAKS_DIR);
-    for (const cartId of pakDirs) {
-      if (cartIds && !cartIds.includes(cartId.toLowerCase())) continue;
-      const pakPath = path.join(GAME_PAKS_DIR, cartId, 'controller_pak.img');
-      if (existsSync(pakPath)) {
-        gamePaksMap.set(cartId, await readFile(pakPath));
-        allCartIds.add(cartId.toLowerCase());
+  // Collect individual labels (for selection exports) or full labels.db
+  const isSelectionExport = cartIds && cartIds.length > 0;
+  let hasLabelsDb = false;
+
+  if (includeLabels) {
+    if (isSelectionExport) {
+      // For selection exports, collect individual label images
+      for (const cartId of cartIds) {
+        try {
+          const labelImage = await getLabelsDbImage(cartId);
+          if (labelImage) {
+            labelsMap.set(cartId.toLowerCase(), labelImage);
+            allCartIds.add(cartId.toLowerCase());
+          }
+        } catch {
+          // Label not found, skip
+        }
       }
+    } else {
+      // For full exports, include the entire labels.db
+      hasLabelsDb = existsSync(LABELS_DB_PATH);
     }
   }
 
-  // Check for labels.db
-  const hasLabelsDb = includeLabels && existsSync(LABELS_DB_PATH);
-  const hasOwnedCarts = includeOwnership && existsSync(OWNED_CARTS_PATH);
+  // Collect ownership data (filtered for selection exports)
+  let ownedCartsData: Buffer | null = null;
+  if (includeOwnership && existsSync(OWNED_CARTS_PATH)) {
+    const rawData = await readFile(OWNED_CARTS_PATH, 'utf8');
+    const ownedCarts = JSON.parse(rawData);
+
+    if (isSelectionExport && cartIds) {
+      // Filter to only include selected cart IDs
+      const cartIdSet = new Set(cartIds);
+      const filteredCarts = {
+        ...ownedCarts,
+        cartridges: ownedCarts.cartridges.filter((c: { cartId: string }) =>
+          cartIdSet.has(c.cartId.toLowerCase())
+        ),
+      };
+      if (filteredCarts.cartridges.length > 0) {
+        ownedCartsData = Buffer.from(JSON.stringify(filteredCarts, null, 2));
+      }
+    } else {
+      // Full export - include all
+      ownedCartsData = Buffer.from(rawData);
+    }
+  }
+  const hasOwnedCarts = ownedCartsData !== null;
 
   // Create manifest
   const manifest: BundleManifest = {
@@ -130,6 +191,7 @@ export async function createBundle(options: {
       hasOwnedCarts,
       settingsCount: settingsMap.size,
       gamePaksCount: gamePaksMap.size,
+      labelsCount: labelsMap.size,
       cartIds: Array.from(allCartIds).sort(),
     },
   };
@@ -156,14 +218,19 @@ export async function createBundle(options: {
     // Add manifest
     archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
 
-    // Add labels.db
+    // Add labels.db (full export)
     if (hasLabelsDb) {
       archive.file(LABELS_DB_PATH, { name: 'labels.db' });
     }
 
+    // Add individual label images (selection export)
+    for (const [cartId, buffer] of labelsMap) {
+      archive.append(buffer, { name: `labels/${cartId}.png` });
+    }
+
     // Add owned-carts.json
-    if (hasOwnedCarts) {
-      archive.file(OWNED_CARTS_PATH, { name: 'owned-carts.json' });
+    if (hasOwnedCarts && ownedCartsData) {
+      archive.append(ownedCartsData, { name: 'owned-carts.json' });
     }
 
     // Add settings
@@ -190,6 +257,7 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
   let manifest: BundleManifest | null = null;
   let labelsDb: Buffer | undefined;
   let ownedCarts: BundleContents['ownedCarts'] | undefined;
+  const labels = new Map<string, Buffer>();
   const settings = new Map<string, object>();
   const gamePaks = new Map<string, Buffer>();
 
@@ -201,6 +269,10 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
       manifest = JSON.parse(content) as BundleManifest;
     } else if (name === 'labels.db') {
       labelsDb = entry.getData();
+    } else if (name.startsWith('labels/') && name.endsWith('.png')) {
+      // Individual label image: labels/<cartId>.png
+      const cartId = name.slice(7, -4); // Remove 'labels/' and '.png'
+      labels.set(cartId.toLowerCase(), entry.getData());
     } else if (name === 'owned-carts.json') {
       const content = entry.getData().toString('utf8');
       ownedCarts = JSON.parse(content);
@@ -221,6 +293,7 @@ export async function parseBundle(buffer: Buffer): Promise<BundleContents> {
   return {
     manifest,
     labelsDb,
+    labels,
     ownedCarts,
     settings,
     gamePaks,
@@ -252,6 +325,7 @@ export async function importBundle(
   const result: ImportResult = {
     success: false,
     labelsImported: false,
+    individualLabelsImported: { added: 0, updated: 0, skipped: 0 },
     ownershipMerged: { added: 0, skipped: 0 },
     settingsImported: { added: 0, skipped: 0, overwritten: 0 },
     gamePaksImported: { added: 0, skipped: 0, overwritten: 0 },
@@ -264,7 +338,7 @@ export async function importBundle(
     // Ensure local directory exists
     await mkdir(LOCAL_DIR, { recursive: true });
 
-    // Import labels.db
+    // Import labels.db (full database)
     if (options.importLabels && bundle.labelsDb) {
       const existingLabels = existsSync(LABELS_DB_PATH);
 
@@ -275,9 +349,40 @@ export async function importBundle(
         // Skip - labels already exist
       } else {
         // keep-both - for labels.db, we'll just overwrite since merging is complex
-        // Could implement label-by-label merge in the future
         await writeFile(LABELS_DB_PATH, bundle.labelsDb);
         result.labelsImported = true;
+      }
+    }
+
+    // Import individual label images
+    if (options.importLabels && bundle.labels.size > 0) {
+      // Create empty labels.db if it doesn't exist
+      if (!existsSync(LABELS_DB_PATH)) {
+        const emptyDb = createEmptyLabelsDb();
+        await writeFile(LABELS_DB_PATH, emptyDb);
+      }
+
+      // Get existing cart IDs to check if we're adding or updating
+      const existingEntries = await getAllEntries(LABELS_DB_PATH);
+      const existingIds = new Set(existingEntries.map(e => e.cartId));
+
+      for (const [cartIdHex, pngBuffer] of bundle.labels) {
+        const cartId = parseInt(cartIdHex, 16);
+        const exists = existingIds.has(cartId);
+
+        try {
+          if (!exists) {
+            await addCartridge(LABELS_DB_PATH, cartId, pngBuffer);
+            result.individualLabelsImported.added++;
+          } else if (options.mergeStrategy === 'overwrite') {
+            await updateLabelImage(LABELS_DB_PATH, cartId, pngBuffer);
+            result.individualLabelsImported.updated++;
+          } else {
+            result.individualLabelsImported.skipped++;
+          }
+        } catch (err) {
+          result.errors.push(`Failed to import label for ${cartIdHex}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
       }
     }
 
@@ -314,15 +419,21 @@ export async function importBundle(
 
     // Import settings
     if (options.importSettings && bundle.settings.size > 0) {
-      await mkdir(SETTINGS_DIR, { recursive: true });
+      await mkdir(LOCAL_GAMES_DIR, { recursive: true });
 
       for (const [cartId, settingsObj] of bundle.settings) {
-        const cartDir = path.join(SETTINGS_DIR, cartId);
-        const settingsPath = path.join(cartDir, 'settings.json');
+        // Find existing game folder or create new one
+        let gameFolder = await findGameFolder(LOCAL_GAMES_DIR, cartId);
+        if (!gameFolder) {
+          // Create new folder for unknown cartridge
+          gameFolder = path.join(LOCAL_GAMES_DIR, `Unknown Cartridge ${cartId}`);
+          await mkdir(gameFolder, { recursive: true });
+        }
+
+        const settingsPath = path.join(gameFolder, 'settings.json');
         const exists = existsSync(settingsPath);
 
         if (!exists) {
-          await mkdir(cartDir, { recursive: true });
           await writeFile(settingsPath, JSON.stringify(settingsObj, null, 2));
           result.settingsImported.added++;
         } else if (options.mergeStrategy === 'overwrite') {
@@ -339,15 +450,21 @@ export async function importBundle(
 
     // Import game paks
     if (options.importGamePaks && bundle.gamePaks.size > 0) {
-      await mkdir(GAME_PAKS_DIR, { recursive: true });
+      await mkdir(LOCAL_GAMES_DIR, { recursive: true });
 
       for (const [cartId, pakBuffer] of bundle.gamePaks) {
-        const cartDir = path.join(GAME_PAKS_DIR, cartId);
-        const pakPath = path.join(cartDir, 'controller_pak.img');
+        // Find existing game folder or create new one
+        let gameFolder = await findGameFolder(LOCAL_GAMES_DIR, cartId);
+        if (!gameFolder) {
+          // Create new folder for unknown cartridge
+          gameFolder = path.join(LOCAL_GAMES_DIR, `Unknown Cartridge ${cartId}`);
+          await mkdir(gameFolder, { recursive: true });
+        }
+
+        const pakPath = path.join(gameFolder, 'controller_pak.img');
         const exists = existsSync(pakPath);
 
         if (!exists) {
-          await mkdir(cartDir, { recursive: true });
           await writeFile(pakPath, pakBuffer);
           result.gamePaksImported.added++;
         } else if (options.mergeStrategy === 'overwrite') {

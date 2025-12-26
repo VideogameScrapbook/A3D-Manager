@@ -41,3 +41,6 @@ notes.md
 
 # For debugging / testing / benchmarking
 labels.db
+
+# Test output directories
+tests/*/output/

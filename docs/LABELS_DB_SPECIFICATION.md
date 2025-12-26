@@ -360,7 +360,7 @@ Testing on a typical SD card showed:
 **Key findings:**
 - **Larger chunks are faster**: 4MB chunks outperform 64KB by ~2.3x
 - **fsync per chunk is slower**: Syncing after each write adds significant overhead
-- **No fsync mode**: Buffers writes and syncs once at the end (fastest, but progress bar may jump)
+- **No fsync mode**: Buffers writes and syncs once at the end (fastest, but progress bar won't be accurate)
 
 ### Configuration
 

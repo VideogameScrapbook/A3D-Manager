@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useImageCache } from '../App';
-import { CartridgesActionBar } from './CartridgesActionBar';
 import { CartridgeCard } from './CartridgeCard';
 import { Pagination } from './Pagination';
 import { LabelsImportModal } from './LabelsImportModal';
@@ -10,7 +9,7 @@ import { ExportBundleModal } from './ExportBundleModal';
 import { LabelSyncModal } from './LabelSyncModal';
 import { CartridgesEmptyState } from './CartridgesEmptyState';
 import { useLabelSync } from './LabelSyncIndicator';
-import { TooltipIcon } from './ui';
+import { TooltipIcon, Button } from './ui';
 import './LabelsBrowser.css';
 
 interface LabelEntry {
@@ -321,25 +320,36 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
   return (
     <div className="labels-browser">
       {hasContent && (
-        <>
-          <div className="labels-header">
-            <h2>Cartridges</h2>
-            <span className="label-count text-pixel text-muted">
-              {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status?.entryCount || 0)} cartridges
-            </span>
+        <div className="labels-header">
+          <div className="labels-header-top">
+            <div>
+              <h2>Cartridges</h2>
+              <span className="label-count text-pixel text-muted">
+            {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status?.entryCount || 0)} cartridges
+          </span>
+            </div>
+            
+            <div className="labels-header-actions">
+              {!!sdCardPath && hasLabels && (
+                <Button variant="secondary" size="sm" onClick={() => setShowImportFromSDModal(true)}>
+                  Import from SD
+                </Button>
+              )}
+              {hasLabels && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSelectionMode(!selectionMode);
+                    setSelectedCartIds(new Set());
+                  }}
+                >
+                  {selectionMode ? 'Exit Select' : 'Select'}
+                </Button>
+              )}
+            </div>
           </div>
-
-          <CartridgesActionBar
-            hasLabels={hasLabels}
-            hasSDCard={!!sdCardPath}
-            selectionMode={selectionMode}
-            onImportFromSD={() => setShowImportFromSDModal(true)}
-            onToggleSelectionMode={() => {
-              setSelectionMode(!selectionMode);
-              setSelectedCartIds(new Set());
-            }}
-          />
-        </>
+        </div>
       )}
 
       {error && <div className="error-message">{error}</div>}
@@ -466,17 +476,21 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
                 <span className="selection-count">
                   {selectedCartIds.size} selected
                 </span>
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setSelectedCartIds(new Set(entries.map(e => e.cartId)))}
                 >
                   Select Page
-                </button>
-                <button onClick={() => setSelectedCartIds(new Set())}>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedCartIds(new Set())}>
                   Clear
-                </button>
+                </Button>
               </div>
               <div className="selection-actions">
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={selectedCartIds.size === 0}
                   onClick={async () => {
                     // Mark selected as owned
@@ -488,22 +502,15 @@ export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsB
                   }}
                 >
                   Mark Owned
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={selectedCartIds.size === 0}
                   onClick={() => setShowExportBundleModal(true)}
                 >
                   Export Selection
-                </button>
-                <button
-                  className="btn-exit"
-                  onClick={() => {
-                    setSelectionMode(false);
-                    setSelectedCartIds(new Set());
-                  }}
-                >
-                  Cancel
-                </button>
+                </Button>
               </div>
             </div>
           )}

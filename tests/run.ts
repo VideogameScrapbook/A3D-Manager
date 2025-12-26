@@ -13,6 +13,7 @@ import { runSuite, printSummary, TestResult } from './utils.js';
 import { labelsDbSuite, cleanOutput as cleanLabelsOutput, writeTestArtifacts } from './labels-db/tests.js';
 import { fileTransferSuite, cleanOutput as cleanFileTransferOutput } from './file-transfer/tests.js';
 import { cartridgeDataSuite, cleanOutput as cleanCartridgeOutput } from './cartridge-data/tests.js';
+import { bundleArchiveSuite, cleanOutput as cleanBundleOutput } from './bundle-archive/tests.js';
 
 const verbose = process.argv.includes('--verbose');
 
@@ -46,6 +47,14 @@ async function main() {
   await cleanCartridgeOutput();
   const cartridgeDataResults = await runSuite(cartridgeDataSuite);
   allResults.push(...cartridgeDataResults);
+
+  // Bundle Archive Tests
+  console.log(`\n┌───────────────────────────────────────────────────────────────┐`);
+  console.log(`│  ${bundleArchiveSuite.name} (${bundleArchiveSuite.tests.length} tests)`);
+  console.log(`└───────────────────────────────────────────────────────────────┘`);
+  await cleanBundleOutput();
+  const bundleArchiveResults = await runSuite(bundleArchiveSuite);
+  allResults.push(...bundleArchiveResults);
 
   // Print summary
   printSummary(allResults);

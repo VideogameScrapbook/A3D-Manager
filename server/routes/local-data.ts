@@ -12,8 +12,8 @@ const USER_CARTS_PATH = path.join(LOCAL_DIR, 'user-carts.json');
 const OWNED_CARTS_PATH = path.join(LOCAL_DIR, 'owned-carts.json');
 const GAMES_DIR = path.join(LOCAL_DIR, 'Library', 'N64', 'Games');
 
-// Helper to count files in a directory recursively
-async function countFiles(dirPath: string): Promise<number> {
+// Helper to count files in a directory recursively (prepared for future use)
+export async function countFiles(dirPath: string): Promise<number> {
   if (!existsSync(dirPath)) return 0;
 
   let count = 0;
