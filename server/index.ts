@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -5,7 +6,9 @@ import { mkdir } from 'fs/promises';
 
 import syncRouter from './routes/sync.js';
 import labelsRouter from './routes/labels.js';
-import cartDbRouter from './routes/cart-db.js';
+import cartridgesRouter from './routes/cartridges.js';
+import sdCardRouter from './routes/sd-card.js';
+import localDataRouter from './routes/local-data.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,7 +27,9 @@ async function ensureLocalDirs() {
 // Routes
 app.use('/api/sync', syncRouter);
 app.use('/api/labels', labelsRouter);
-app.use('/api/cart-db', cartDbRouter);
+app.use('/api/cartridges', cartridgesRouter);
+app.use('/api/sd-card', sdCardRouter);
+app.use('/api/local-data', localDataRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -37,6 +42,9 @@ async function start() {
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    if (process.env.READ_LABELS_FROM_SD === 'true') {
+      console.log('📀 SD Card label reading enabled (READ_LABELS_FROM_SD=true)');
+    }
   });
 }
 

@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useImageCache } from '../App';
+import { CartridgeCard } from './CartridgeCard';
+import { Pagination } from './Pagination';
 import { LabelsImportModal } from './LabelsImportModal';
-import { AddCartridgeModal } from './AddCartridgeModal';
-import { ConfirmResetModal } from './ConfirmResetModal';
+import { ImportFromSDModal } from './ImportFromSDModal';
+import { ExportBundleModal } from './ExportBundleModal';
+import { LabelSyncModal } from './LabelSyncModal';
+import { CartridgesEmptyState } from './CartridgesEmptyState';
+import { useLabelSync } from './LabelSyncIndicator';
+import { TooltipIcon, Button } from './ui';
+import './LabelsBrowser.css';
 
 interface LabelEntry {
   cartId: string;
@@ -36,7 +44,10 @@ interface FilterOptions {
 
 interface LabelsStatus {
   imported: boolean;
+  hasLabels?: boolean;
+  hasOwnedCarts?: boolean;
   entryCount?: number;
+  ownedCount?: number;
   fileSize?: number;
   fileSizeMB?: string;
 }
@@ -47,10 +58,14 @@ interface LabelsBrowserProps {
   sdCardPath?: string;
 }
 
-export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps) {
+export function LabelsBrowser({ onSelectLabel, refreshKey, sdCardPath }: LabelsBrowserProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const hasLoadedRef = useRef(false);
-  const [imageCacheBuster, setImageCacheBuster] = useState(0);
+  const { imageCacheBuster: globalCacheBuster } = useImageCache();
+  const { labelsRefreshKey } = useLabelSync();
+  const [localCacheBuster, setLocalCacheBuster] = useState(0);
+  // Combine global and local cache busters
+  const imageCacheBuster = Math.max(globalCacheBuster, localCacheBuster);
 
   const [status, setStatus] = useState<LabelsStatus | null>(null);
   const [entries, setEntries] = useState<LabelEntry[]>([]);
@@ -67,14 +82,24 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
   const [regionFilter, setRegionFilter] = useState<string>(searchParams.get('region') || '');
   const [languageFilter, setLanguageFilter] = useState<string>(searchParams.get('language') || '');
   const [videoModeFilter, setVideoModeFilter] = useState<string>(searchParams.get('videoMode') || '');
+  const [ownedFilter, setOwnedFilter] = useState<boolean>(searchParams.get('owned') === 'true');
 
   // Modal states
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
+  const [showImportFromSDModal, setShowImportFromSDModal] = useState(false);
+  const [showExportBundleModal, setShowExportBundleModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+
+  // Selection mode
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCartIds, setSelectedCartIds] = useState<Set<string>>(new Set());
+
+  // Unowned cartridges indicator
+  const [unownedOnSDCount, setUnownedOnSDCount] = useState(0);
 
   const pageSize = 48;
-  const hasActiveFilters = regionFilter || languageFilter || videoModeFilter || searchQuery;
+  const hasActiveFilters = regionFilter || languageFilter || videoModeFilter || searchQuery || ownedFilter;
+  const hasClearableFilters = regionFilter || languageFilter || videoModeFilter || searchQuery;
 
   // Update URL when filters or page change
   const updateURL = useCallback((
@@ -84,6 +109,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       region?: string;
       language?: string;
       videoMode?: string;
+      owned?: boolean;
     }
   ) => {
     const params = new URLSearchParams();
@@ -92,6 +118,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     if (filters.region) params.set('region', filters.region);
     if (filters.language) params.set('language', filters.language);
     if (filters.videoMode) params.set('videoMode', filters.videoMode);
+    if (filters.owned) params.set('owned', 'true');
     setSearchParams(params);
   }, [setSearchParams]);
 
@@ -126,6 +153,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       language?: string;
       videoMode?: string;
       search?: string;
+      owned?: boolean;
     }
   ) => {
     try {
@@ -140,11 +168,13 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
       const language = options?.language ?? languageFilter;
       const videoMode = options?.videoMode ?? videoModeFilter;
       const search = options?.search ?? searchQuery;
+      const owned = options?.owned ?? ownedFilter;
 
       if (region) params.set('region', region);
       if (language) params.set('language', language);
       if (videoMode) params.set('videoMode', videoMode);
       if (search) params.set('search', search);
+      if (owned) params.set('owned', 'true');
 
       const response = await fetch(`/api/labels/page/${pageNum}?${params}`);
       if (!response.ok) throw new Error('Failed to fetch labels');
@@ -169,38 +199,41 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     } finally {
       setLoading(false);
     }
-  }, [regionFilter, languageFilter, videoModeFilter, searchQuery]);
+  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, ownedFilter]);
+
+  // Check for unowned cartridges on SD card
+  const checkUnownedOnSD = useCallback(async () => {
+    if (!sdCardPath) {
+      setUnownedOnSDCount(0);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/cartridges/owned/import-from-sd/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdCardPath }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const unownedCount = result.summary.total - result.summary.alreadyOwned;
+        setUnownedOnSDCount(unownedCount);
+      }
+    } catch {
+      // Silently fail - indicator just won't show
+    }
+  }, [sdCardPath]);
+
+  // Run check on mount and when SD card changes
+  useEffect(() => {
+    checkUnownedOnSD();
+  }, [checkUnownedOnSD]);
 
   const handleRefresh = async () => {
     await fetchStatus();
     await fetchPage(0);
-  };
-
-  const handleExport = async () => {
-    try {
-      const response = await fetch('/api/labels/export');
-      if (!response.ok) throw new Error('Export failed');
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'labels.db';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
-    }
-  };
-
-  const handleResetComplete = async () => {
-    setStatus(null);
-    setEntries([]);
-    setTotalPages(0);
-    setTotalEntries(0);
-    await fetchStatus();
+    await checkUnownedOnSD();
   };
 
   const clearAllFilters = () => {
@@ -208,30 +241,33 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
     setLanguageFilter('');
     setVideoModeFilter('');
     setSearchQuery('');
-    updateURL(0, {});
+    // Preserve ownedFilter - it's not a "clearable" filter
+    updateURL(0, { owned: ownedFilter });
   };
 
   const handlePageChange = (newPage: number) => {
-    updateURL(newPage, { search: searchQuery, region: regionFilter, language: languageFilter, videoMode: videoModeFilter });
+    updateURL(newPage, { search: searchQuery, region: regionFilter, language: languageFilter, videoMode: videoModeFilter, owned: ownedFilter });
     fetchPage(newPage);
   };
 
   const handleFilterChange = (
-    type: 'search' | 'region' | 'language' | 'videoMode',
-    value: string
+    type: 'search' | 'region' | 'language' | 'videoMode' | 'owned',
+    value: string | boolean
   ) => {
     // When filters change, always go back to page 1
     const newFilters = {
-      search: type === 'search' ? value : searchQuery,
-      region: type === 'region' ? value : regionFilter,
-      language: type === 'language' ? value : languageFilter,
-      videoMode: type === 'videoMode' ? value : videoModeFilter,
+      search: type === 'search' ? value as string : searchQuery,
+      region: type === 'region' ? value as string : regionFilter,
+      language: type === 'language' ? value as string : languageFilter,
+      videoMode: type === 'videoMode' ? value as string : videoModeFilter,
+      owned: type === 'owned' ? value as boolean : ownedFilter,
     };
 
-    if (type === 'search') setSearchQuery(value);
-    if (type === 'region') setRegionFilter(value);
-    if (type === 'language') setLanguageFilter(value);
-    if (type === 'videoMode') setVideoModeFilter(value);
+    if (type === 'search') setSearchQuery(value as string);
+    if (type === 'region') setRegionFilter(value as string);
+    if (type === 'language') setLanguageFilter(value as string);
+    if (type === 'videoMode') setVideoModeFilter(value as string);
+    if (type === 'owned') setOwnedFilter(value as boolean);
 
     updateURL(0, newFilters);
   };
@@ -257,14 +293,14 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
 
     // Wait for next frame to ensure DOM is updated
     requestAnimationFrame(() => {
-      const tiles = document.querySelectorAll('.label-tile');
-      tiles.forEach((tile) => {
-        tile.classList.remove('animate-in');
+      const cards = document.querySelectorAll('.cartridge-card');
+      cards.forEach((card) => {
+        card.classList.remove('animate-in');
       });
 
       requestAnimationFrame(() => {
-        tiles.forEach((tile) => {
-          tile.classList.add('animate-in');
+        cards.forEach((card) => {
+          card.classList.add('animate-in');
         });
       });
     });
@@ -273,7 +309,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
   // Debounced refetch when filters or search change (but not on mount)
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
-    // Don't run on initial mount or if status not loaded
+    // Don't run on initial mount or if no content
     if (!status?.imported || !hasLoadedRef.current) return;
 
     // Skip the first run after initial load
@@ -288,88 +324,102 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, status?.imported]);
+  }, [regionFilter, languageFilter, videoModeFilter, searchQuery, ownedFilter, status?.imported]);
 
   // Refetch when refreshKey changes (after delete/update)
   useEffect(() => {
     if (refreshKey === undefined || refreshKey === 0) return;
     fetchPage(page);
-    setImageCacheBuster(Date.now());
+    setLocalCacheBuster(Date.now());
+    checkUnownedOnSD();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
+  // Refetch when labelsRefreshKey changes (after sync from navbar)
+  useEffect(() => {
+    if (labelsRefreshKey === 0) return;
+    // Full refresh - refetch status and page
+    fetchStatus().then((s) => {
+      if (s?.imported) {
+        fetchPage(0);
+        fetchFilterOptions();
+      }
+    });
+    setLocalCacheBuster(Date.now());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelsRefreshKey]);
+
+  const hasLabels = status?.hasLabels ?? false;
+  const hasContent = status?.imported ?? false;
+
   return (
     <div className="labels-browser">
-      <div className="labels-header">
-        <h2>Labels Database</h2>
-        {status?.imported && (
-          <span className="label-count">
-            {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status.entryCount)} labels
+      {hasContent && (
+        <div className="labels-header">
+          <div className="labels-header-top">
+            <div>
+              <h2>Cartridges</h2>
+              <span className="label-count text-pixel text-muted">
+            {hasActiveFilters ? `${totalEntries} of ${totalUnfiltered}` : (totalEntries || status?.entryCount || 0)} cartridges
           </span>
-        )}
-      </div>
-
-      {/* Action Bar */}
-      <div className="labels-action-bar">
-        <div className="action-bar-left">
-          <button
-            className="btn-primary"
-            onClick={() => setShowImportModal(true)}
-          >
-            Import labels.db
-          </button>
-
-          <button
-            className="btn-secondary"
-            onClick={() => setShowAddModal(true)}
-          >
-            Add Cartridge
-          </button>
-
-          {status?.imported && (
-            <button
-              className="btn-secondary"
-              onClick={handleExport}
-            >
-              Export
-            </button>
-          )}
-        </div>
-
-        {status?.imported && (
-          <div className="action-bar-right">
-            <button
-              className="btn-ghost btn-danger-text"
-              onClick={() => setShowResetModal(true)}
-            >
-              Clear All Labels
-            </button>
+            </div>
+            
+            <div className="labels-header-actions">
+              {!!sdCardPath && hasLabels && (
+                <Button variant="secondary" size="sm" onClick={() => setShowImportFromSDModal(true)} className={unownedOnSDCount > 0 ? 'has-indicator' : ''}>
+                  Import Owned from SD
+                  {unownedOnSDCount > 0 && <span className="btn-badge">{unownedOnSDCount}</span>}
+                </Button>
+              )}
+              {hasLabels && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSelectionMode(!selectionMode);
+                    setSelectedCartIds(new Set());
+                  }}
+                >
+                  {selectionMode ? 'Exit Select' : 'Select'}
+                </Button>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && <div className="error-message">{error}</div>}
 
-      {!status?.imported ? (
-        <div className="labels-empty">
-          <div className="empty-icon">🎮</div>
-          <h3>No Labels Yet</h3>
-          <p>Import an existing labels.db file to get started quickly, or build your collection by adding cartridges one at a time.</p>
-          <div className="empty-actions">
-            <button className="btn-primary" onClick={() => setShowImportModal(true)}>
-              Import labels.db
-            </button>
-            <button className="btn-secondary" onClick={() => setShowAddModal(true)}>
-              Add First Cartridge
-            </button>
-          </div>
-        </div>
+      {!hasContent ? (
+        <CartridgesEmptyState
+          sdCardPath={sdCardPath ?? null}
+          onImportLabelsDb={() => setShowImportModal(true)}
+          onImportFromSD={() => setShowImportFromSDModal(true)}
+          onSyncLabelsFromSD={() => setShowSyncModal(true)}
+        />
       ) : (
         <>
           {/* Search and Filters */}
           <div className="labels-filters">
+            <div className="filter-group filter-group-toggle">
+              <div className="toggle-buttons">
+                <button
+                  className={`toggle-btn ${!ownedFilter ? 'active' : ''}`}
+                  onClick={() => handleFilterChange('owned', false)}
+                >
+                  All
+                </button>
+                <button
+                  className={`toggle-btn ${ownedFilter ? 'active' : ''}`}
+                  onClick={() => handleFilterChange('owned', true)}
+                >
+                  Owned
+                </button>
+              </div>
+            </div>
+
             <div className="filter-group filter-group-search">
-              <label htmlFor="search-input">Search</label>
+              <label htmlFor="search-input" className="text-label">Search</label>
               <div className="search-input-wrapper">
                 <input
                   id="search-input"
@@ -377,6 +427,9 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
                   placeholder="Game name or cart ID..."
                   value={searchQuery}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
                 />
                 {searchQuery && (
                   <button
@@ -393,7 +446,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
             {filterOptions && (
               <>
                 <div className="filter-group">
-                  <label htmlFor="region-filter">Region</label>
+                  <label htmlFor="region-filter" className="text-label">Region</label>
                   <select
                     id="region-filter"
                     value={regionFilter}
@@ -407,7 +460,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
                 </div>
 
                 <div className="filter-group">
-                  <label htmlFor="language-filter">Language</label>
+                  <label htmlFor="language-filter" className="text-label">Language</label>
                   <select
                     id="language-filter"
                     value={languageFilter}
@@ -421,7 +474,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
                 </div>
 
                 <div className="filter-group">
-                  <label htmlFor="videomode-filter">Video</label>
+                  <label htmlFor="videomode-filter" className="text-label">Video</label>
                   <select
                     id="videomode-filter"
                     value={videoModeFilter}
@@ -436,7 +489,7 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
               </>
             )}
 
-            {hasActiveFilters && (
+            {hasClearableFilters && (
               <button
                 className="btn-ghost filter-clear-btn"
                 onClick={clearAllFilters}
@@ -445,74 +498,97 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
               </button>
             )}
 
-            <div className="filter-info" title="Our game metadata is a work in progress and doesn't include every cartridge. When filters are active, only cartridges with known metadata will be shown.">
-              <span className="filter-info-icon">?</span>
-            </div>
+            <TooltipIcon
+              content="Our game metadata is a work in progress and doesn't include every cartridge. When filters are active, only cartridges with known metadata will be shown."
+              position="bottom"
+              className="filter-info"
+            />
           </div>
+
+          {/* Selection Toolbar */}
+          {selectionMode && (
+            <div className="selection-toolbar">
+              <div className="selection-info">
+                <span className="selection-count">
+                  {selectedCartIds.size} selected
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedCartIds(new Set(entries.map(e => e.cartId)))}
+                >
+                  Select Page
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedCartIds(new Set())}>
+                  Clear
+                </Button>
+              </div>
+              <div className="selection-actions">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={selectedCartIds.size === 0}
+                  onClick={async () => {
+                    // Mark selected as owned
+                    for (const cartId of selectedCartIds) {
+                      await fetch(`/api/cartridges/owned/${cartId}`, { method: 'POST' });
+                    }
+                    setSelectedCartIds(new Set());
+                    setSelectionMode(false);
+                  }}
+                >
+                  Mark Owned
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={selectedCartIds.size === 0}
+                  onClick={() => setShowExportBundleModal(true)}
+                >
+                  Export Selection
+                </Button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="loading">Loading...</div>
           ) : (
             <>
               <div className="labels-grid">
-                {entries.map((entry, index) => (
-                  <div
+                {entries.map((entry, i) => (
+                  <CartridgeCard
                     key={entry.cartId}
-                    className={`label-tile ${entry.name ? 'has-name' : ''}`}
-                    style={{ '--tile-index': index } as React.CSSProperties}
-                    onClick={() => onSelectLabel(entry.cartId, entry.name)}
-                  >
-                    <div className="cart-sprite">
-                      <img
-                        className="cart-artwork"
-                        src={`/api/labels/${entry.cartId}${imageCacheBuster ? `?v=${imageCacheBuster}` : ''}`}
-                        alt={entry.name || entry.cartId}
-                        loading="lazy"
-                      />
-                      <img className="cart-overlay" src="/n64-cart-dark.png" alt="" />
-                      <img className="cart-overlay cart-overlay-hover" src="/n64-cart-black.png" alt="" />
-                    </div>
-                    <div className="label-info">
-                      <span className={`label-name ${!entry.name ? 'unknown' : ''}`}>
-                        {entry.name || 'Title Unknown'}
-                      </span>
-                      <span className="label-id">{entry.cartId}</span>
-                    </div>
-                  </div>
+                    cartId={entry.cartId}
+                    name={entry.name}
+                    gridIndex={i}
+                    hasLabel={entry.index >= 0}
+                    selectionMode={selectionMode}
+                    isSelected={selectedCartIds.has(entry.cartId)}
+                    imageCacheBuster={imageCacheBuster}
+                    onClick={() => {
+                      if (selectionMode) {
+                        const newSelection = new Set(selectedCartIds);
+                        if (newSelection.has(entry.cartId)) {
+                          newSelection.delete(entry.cartId);
+                        } else {
+                          newSelection.add(entry.cartId);
+                        }
+                        setSelectedCartIds(newSelection);
+                      } else {
+                        onSelectLabel(entry.cartId, entry.name);
+                      }
+                    }}
+                  />
                 ))}
               </div>
 
-              {totalPages > 1 && (
-                <div className="labels-pagination">
-                  <button
-                    onClick={() => handlePageChange(0)}
-                    disabled={page === 0 || loading}
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => handlePageChange(page - 1)}
-                    disabled={page === 0 || loading}
-                  >
-                    Previous
-                  </button>
-                  <span>
-                    Page {page + 1} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => handlePageChange(page + 1)}
-                    disabled={page >= totalPages - 1 || loading}
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => handlePageChange(totalPages - 1)}
-                    disabled={page >= totalPages - 1 || loading}
-                  >
-                    Last
-                  </button>
-                </div>
-              )}
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                disabled={loading}
+              />
             </>
           )}
         </>
@@ -530,17 +606,31 @@ export function LabelsBrowser({ onSelectLabel, refreshKey }: LabelsBrowserProps)
         } : null}
       />
 
-      <AddCartridgeModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={handleRefresh}
+      {sdCardPath && (
+        <ImportFromSDModal
+          isOpen={showImportFromSDModal}
+          onClose={() => setShowImportFromSDModal(false)}
+          onImportComplete={handleRefresh}
+          sdCardPath={sdCardPath}
+        />
+      )}
+
+      <ExportBundleModal
+        isOpen={showExportBundleModal}
+        onClose={() => setShowExportBundleModal(false)}
+        onExportComplete={() => {
+          if (selectionMode) {
+            setSelectionMode(false);
+            setSelectedCartIds(new Set());
+          }
+        }}
+        selectedCartIds={selectionMode && selectedCartIds.size > 0 ? Array.from(selectedCartIds) : undefined}
       />
 
-      <ConfirmResetModal
-        isOpen={showResetModal}
-        onClose={() => setShowResetModal(false)}
-        onConfirm={handleResetComplete}
-        entryCount={status?.entryCount}
+      <LabelSyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSyncComplete={handleRefresh}
       />
     </div>
   );

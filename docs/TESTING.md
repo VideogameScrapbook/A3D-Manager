@@ -23,14 +23,28 @@ tests/
 ├── labels-db/
 │   ├── tests.ts            # Labels database tests
 │   ├── fixtures/           # Test images and data
+│   ├── scripts/            # Fixture generation scripts
 │   └── output/             # Generated output (gitignored)
-└── file-transfer/
-    ├── tests.ts            # File transfer tests
-    └── output/             # Generated output (gitignored)
+├── file-transfer/
+│   ├── tests.ts            # File transfer tests
+│   └── output/             # Generated output (gitignored)
+├── cartridge-data/
+│   ├── tests.ts            # Cartridge data tests
+│   └── output/             # Generated output (gitignored)
+└── game-data/
+    └── fixtures/           # Shared fixtures (settings.json, controller_pak.img)
 
 server/lib/
 ├── labels-db-core.ts       # Labels database operations
-└── file-transfer.ts        # Progress-enabled file operations
+├── labels-db-sync.ts       # SD card sync logic
+├── labels-db-compare.ts    # Database comparison
+├── file-transfer.ts        # Progress-enabled file operations
+├── owned-carts.ts          # Ownership tracking
+├── cartridge-settings.ts   # Settings parsing/validation
+├── game-pak.ts             # Controller pak operations
+├── sd-card.ts              # SD card detection
+├── bundle-archive.ts       # Asset bundle handling
+└── tga.ts                  # TGA image format
 ```
 
 ## Adding New Tests
@@ -93,3 +107,47 @@ Tests for the progress-enabled file transfer library used by SD card sync.
 | Single File Copy | 4 | File copying, progress callbacks, speed/ETA, directory creation |
 | Directory Copy | 3 | Structure copying, batch progress, byte tracking |
 | Edge Cases | 2 | Empty files and empty directories |
+
+---
+
+## Cartridge Data Tests (28 tests)
+
+Tests for cartridge ownership tracking, settings parsing, and game pak operations.
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| Owned Carts | 5 | Load/save round-trip, duplicate handling, ID normalization, version validation |
+| Settings | 12 | parseSettings, validateSettings, hardware/display extraction, defaults |
+| Game Pak | 11 | 32KB size validation, empty pak creation, header structure, page tracking |
+
+---
+
+## Interactive Benchmarks (Settings Page)
+
+The Settings page (`/settings`) includes interactive benchmarks for testing SD card performance with a connected SD card.
+
+### Debug Benchmark
+
+Tests the full sync pipeline:
+1. Uploads `labels.db` to SD Card `/Debug` folder
+2. Creates a local copy with 50 modified entries
+3. Runs quick comparison (file size + ID table hash)
+4. Runs detailed comparison (image data hashing)
+5. Syncs only the 50 changed entries (partial update)
+
+Shows timing breakdown for each step, demonstrating the speed advantage of partial sync over full uploads.
+
+### Chunk Size Benchmark
+
+Tests different write configurations to find optimal settings for your SD card:
+
+| Configuration | Description |
+|--------------|-------------|
+| 64KB - 2MB + fsync | Write chunks with disk sync after each (accurate progress) |
+| 256KB - 4MB (no fsync) | Write chunks and sync once at end (fastest) |
+
+Each configuration runs 2 iterations. Results are sorted by speed, showing the fastest configuration for your specific SD card.
+
+**Typical results**: 4MB chunks without fsync is ~2.3x faster than 64KB with fsync.
+
+See [LABELS_DB_SPECIFICATION.md](./LABELS_DB_SPECIFICATION.md#sd-card-transfer-performance) for configuration details.

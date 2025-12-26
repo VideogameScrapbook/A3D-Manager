@@ -84,58 +84,137 @@ The N64 Controller Pak was a memory card that plugged into the controller for sa
 
 JSON configuration file for each game. Contains display and hardware settings.
 
+**Note**: The Analogue 3D writes JSON with trailing commas, which is technically invalid JSON. A3D Manager sanitizes these when reading.
+
+#### TypeScript Interface
+
+```typescript
+interface CartridgeSettings {
+  title: string;
+  display: {
+    odm: 'bvm' | 'pvm' | 'crt' | 'scanlines' | 'clean';
+    catalog: {
+      bvm: CRTModeSettings;
+      pvm: CRTModeSettings;
+      crt: CRTModeSettings;
+      scanlines: CRTModeSettings;
+      clean: CleanModeSettings;
+    };
+  };
+  hardware: {
+    virtualExpansionPak: boolean;
+    region: 'Auto' | 'NTSC' | 'PAL';
+    disableDeblur: boolean;
+    enable32BitColor: boolean;
+    disableTextureFiltering: boolean;
+    disableAntialiasing: boolean;
+    forceOriginalHardware: boolean;
+    overclock: 'Auto' | 'Enhanced' | 'Enhanced+' | 'Unleashed';
+  };
+}
+
+interface CRTModeSettings {
+  horizontalBeamConvergence: 'Off' | 'Consumer' | 'Professional';
+  verticalBeamConvergence: 'Off' | 'Consumer' | 'Professional';
+  enableEdgeOvershoot: boolean;
+  enableEdgeHardness: boolean;
+  imageSize: 'Fill' | 'Integer' | 'Integer+';
+  imageFit: 'Original' | 'Stretch' | 'Cinema Zoom';
+}
+
+interface CleanModeSettings {
+  interpolationAlg: 'BC Spline' | 'Bilinear' | 'Blackman Harris' | 'Lanczos2';
+  gammaTransferFunction: 'Tube' | 'Modern' | 'Professional';
+  sharpness: 'Very Soft' | 'Soft' | 'Medium' | 'Sharp' | 'Very Sharp';
+  imageSize: 'Fill' | 'Integer' | 'Integer+';
+  imageFit: 'Original' | 'Stretch' | 'Cinema Zoom';
+}
+```
+
+#### Example
+
 ```json
 {
-  "title": "Game Name",
+  "title": "GoldenEye 007",
   "display": {
-    "odm": "crt",                    // Active display mode: "bvm", "pvm", "crt", "scanlines", "clean"
+    "odm": "crt",
     "catalog": {
-      "bvm": { ... },               // Professional BVM monitor settings
-      "pvm": { ... },               // Professional PVM monitor settings
-      "crt": { ... },               // Consumer CRT settings
-      "scanlines": { ... },         // Scanline filter settings
-      "clean": { ... }              // Clean/digital filter settings
+      "bvm": {
+        "horizontalBeamConvergence": "Professional",
+        "verticalBeamConvergence": "Professional",
+        "enableEdgeOvershoot": false,
+        "enableEdgeHardness": false,
+        "imageSize": "Fill",
+        "imageFit": "Original"
+      },
+      "pvm": { ... },
+      "crt": { ... },
+      "scanlines": { ... },
+      "clean": {
+        "interpolationAlg": "BC Spline",
+        "gammaTransferFunction": "Tube",
+        "sharpness": "Medium",
+        "imageSize": "Fill",
+        "imageFit": "Original"
+      }
     }
   },
   "hardware": {
-    "virtualExpansionPak": true,    // Enable virtual Expansion Pak
-    "region": "Auto",               // Region: "Auto", "NTSC", "PAL"
-    "disableDeblur": false,         // Disable VI deblur
-    "enable32BitColor": true,       // Enable 32-bit color mode
+    "virtualExpansionPak": true,
+    "region": "Auto",
+    "disableDeblur": false,
+    "enable32BitColor": true,
     "disableTextureFiltering": false,
     "disableAntialiasing": false,
     "forceOriginalHardware": false,
-    "overclock": "Unleashed"        // "Auto", "Enhanced", "Unleashed"
+    "overclock": "Unleashed"
   }
 }
 ```
 
-#### Display Catalog Settings
+#### Hardware Settings
 
-Each display mode has these settings:
+| Setting | Type | Values | Description |
+|---------|------|--------|-------------|
+| `virtualExpansionPak` | boolean | | Enable virtual Expansion Pak |
+| `region` | string | `Auto`, `NTSC`, `PAL` | Force region mode |
+| `disableDeblur` | boolean | | Disable VI deblur filter |
+| `enable32BitColor` | boolean | | Enable 32-bit color mode |
+| `disableTextureFiltering` | boolean | | Disable texture filtering |
+| `disableAntialiasing` | boolean | | Disable antialiasing |
+| `forceOriginalHardware` | boolean | | Force original N64 hardware behavior |
+| `overclock` | string | `Auto`, `Enhanced`, `Enhanced+`, `Unleashed` | CPU overclock level |
 
-```json
-{
-  "horizontalBeamConvergence": "Professional",  // "Off", "Consumer", "Professional"
-  "verticalBeamConvergence": "Professional",
-  "enableEdgeOvershoot": false,
-  "enableEdgeHardness": false,
-  "imageSize": "Fill",                          // "Fill", "Fit"
-  "imageFit": "Original"                        // "Original", "Stretch"
-}
-```
+#### Display Modes
 
-The "clean" mode has different settings:
+| Mode | Description |
+|------|-------------|
+| `bvm` | Sony BVM professional broadcast monitor emulation |
+| `pvm` | Sony PVM professional video monitor emulation |
+| `crt` | Consumer CRT television emulation |
+| `scanlines` | Scanline filter overlay |
+| `clean` | Clean/sharp digital output |
 
-```json
-{
-  "interpolationAlg": "BC Spline",              // Interpolation algorithm
-  "gammaTransferFunction": "Tube",
-  "sharpness": "Medium",                        // "Low", "Medium", "High"
-  "imageSize": "Fill",
-  "imageFit": "Original"
-}
-```
+#### CRT Mode Settings (bvm, pvm, crt, scanlines)
+
+| Setting | Values | Description |
+|---------|--------|-------------|
+| `horizontalBeamConvergence` | `Off`, `Consumer`, `Professional` | Horizontal beam alignment |
+| `verticalBeamConvergence` | `Off`, `Consumer`, `Professional` | Vertical beam alignment |
+| `enableEdgeOvershoot` | boolean | Edge overshoot effect |
+| `enableEdgeHardness` | boolean | Edge hardness effect |
+| `imageSize` | `Fill`, `Integer`, `Integer+` | Image scaling mode |
+| `imageFit` | `Original`, `Stretch`, `Cinema Zoom` | Aspect ratio handling |
+
+#### Clean Mode Settings
+
+| Setting | Values | Description |
+|---------|--------|-------------|
+| `interpolationAlg` | `BC Spline`, `Bilinear`, `Blackman Harris`, `Lanczos2` | Upscaling algorithm |
+| `gammaTransferFunction` | `Tube`, `Modern`, `Professional` | Gamma curve |
+| `sharpness` | `Very Soft`, `Soft`, `Medium`, `Sharp`, `Very Sharp` | Sharpness level |
+| `imageSize` | `Fill`, `Integer`, `Integer+` | Image scaling mode |
+| `imageFit` | `Original`, `Stretch`, `Cinema Zoom` | Aspect ratio handling |
 
 ### library.db (Game Library Database)
 

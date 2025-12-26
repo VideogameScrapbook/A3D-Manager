@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
+import { readFile, writeFile, unlink, mkdir, stat } from 'fs/promises';
 import {
   getLabelsDbStatus,
   getAllLocalLabelsDbEntries,
   getLabelsDbImage,
+  getLabelsDbImageFromPath,
   searchLabelsDb,
   importLabelsDbFileFromBuffer,
   mergeLabelsDbFromBuffer,
@@ -13,7 +14,22 @@ import {
   addEntryToLabelsDb,
   deleteEntryFromLabelsDb,
   updateEntryInLabelsDb,
+  hasLocalLabelsDb,
 } from '../lib/labels-db-core.js';
+import { getOwnedCartIds } from '../lib/owned-carts.js';
+import { detectSDCards } from '../lib/sd-card.js';
+import { compareQuick, compareDetailed } from '../lib/labels-db-compare.js';
+import {
+  syncChangedEntries,
+  createModifiedLabelsDb,
+} from '../lib/labels-db-sync.js';
+import {
+  copyFileWithProgress,
+  copyFileWithSettings,
+  formatBytes,
+  formatSpeed,
+  formatTime,
+} from '../lib/file-transfer.js';
 
 const router = Router();
 
@@ -186,23 +202,33 @@ const uploadImage = multer({
   },
 });
 
-// GET /api/labels/status - Check if local labels.db exists
+// GET /api/labels/status - Check if local labels.db exists and/or owned carts exist
 router.get('/status', async (_req, res) => {
   try {
     const status = await getLabelsDbStatus();
+    const ownedIds = await getOwnedCartIds();
 
-    if (!status) {
+    const hasLabels = !!status;
+    const hasOwnedCarts = ownedIds.length > 0;
+
+    // We have content if we have labels OR owned carts
+    if (!hasLabels && !hasOwnedCarts) {
       return res.json({
         imported: false,
-        message: 'No labels.db imported.',
+        hasLabels: false,
+        hasOwnedCarts: false,
+        message: 'No labels.db imported and no owned cartridges.',
       });
     }
 
     res.json({
-      imported: true,
-      entryCount: status.entryCount,
-      fileSize: status.fileSize,
-      fileSizeMB: (status.fileSize / 1024 / 1024).toFixed(2),
+      imported: true, // We have browsable content
+      hasLabels,
+      hasOwnedCarts,
+      entryCount: status?.entryCount || 0,
+      ownedCount: ownedIds.length,
+      fileSize: status?.fileSize || 0,
+      fileSizeMB: status ? (status.fileSize / 1024 / 1024).toFixed(2) : '0',
     });
   } catch (error) {
     console.error('Error checking labels status:', error);
@@ -324,18 +350,31 @@ async function getSortedEntries(): Promise<EnhancedEntry[] | null> {
 // Filter entries based on query parameters
 function applyFilters(
   entries: EnhancedEntry[],
-  filters: { region?: string; language?: string; videoMode?: string; search?: string }
+  filters: {
+    region?: string;
+    language?: string;
+    videoMode?: string;
+    search?: string;
+    ownedIds?: Set<string>;
+  }
 ): EnhancedEntry[] {
   return entries.filter(entry => {
     // If any metadata filter is set, we only show entries that have metadata
     const hasMetadataFilters = filters.region || filters.language || filters.videoMode;
+
+    // Owned filter - only show owned cartridges
+    if (filters.ownedIds) {
+      if (!filters.ownedIds.has(entry.cartId.toLowerCase())) return false;
+    }
 
     // Search filter - matches name or cart ID
     if (filters.search) {
       const query = filters.search.toLowerCase();
       const nameMatch = entry.name?.toLowerCase().includes(query);
       const idMatch = entry.cartId.toLowerCase().includes(query);
-      if (!nameMatch && !idMatch) return false;
+      // Also match entries without names when searching for "unknown" or "cartridge"
+      const unknownMatch = !entry.name && 'unknown cartridge'.includes(query);
+      if (!nameMatch && !idMatch && !unknownMatch) return false;
     }
 
     if (filters.region) {
@@ -508,6 +547,7 @@ router.get('/user-carts', async (_req, res) => {
 });
 
 // GET /api/labels/page/:page - Get paginated labels (sorted alphabetically)
+// Merges entries from labels.db and owned-carts.json
 router.get('/page/:page', async (req, res) => {
   try {
     await loadCartDatabase();
@@ -520,18 +560,92 @@ router.get('/page/:page', async (req, res) => {
     const language = req.query.language as string | undefined;
     const videoMode = req.query.videoMode as string | undefined;
     const search = req.query.search as string | undefined;
+    const owned = req.query.owned === 'true';
 
-    const sortedEntries = await getSortedEntries();
+    // Get entries from labels.db (may be null if no labels.db exists)
+    const labelsEntries = await getSortedEntries();
 
-    if (!sortedEntries) {
+    // Get all owned cart IDs
+    const allOwnedIds = await getOwnedCartIds();
+    const ownedIdsSet = new Set(allOwnedIds.map(id => id.toLowerCase()));
+
+    // If no labels.db and no owned carts, show empty state
+    if (!labelsEntries && allOwnedIds.length === 0) {
       return res.json({
         imported: false,
-        message: 'No labels.db imported.',
+        message: 'No labels.db imported and no owned cartridges.',
       });
     }
 
+    // Build merged entries list
+    let mergedEntries: EnhancedEntry[];
+
+    if (labelsEntries) {
+      // Start with labels entries
+      const labelsIdsSet = new Set(labelsEntries.map(e => e.cartId.toLowerCase()));
+      mergedEntries = [...labelsEntries];
+
+      // Add owned carts that don't have labels
+      for (const cartId of allOwnedIds) {
+        if (!labelsIdsSet.has(cartId.toLowerCase())) {
+          const meta = getCartMetadata(cartId);
+          mergedEntries.push({
+            cartId,
+            index: -1, // No label index
+            name: getCartName(cartId),
+            region: meta.region,
+            languages: meta.languages,
+            videoMode: meta.videoMode,
+            releaseType: meta.releaseType,
+            revision: meta.revision,
+          });
+        }
+      }
+
+      // Re-sort the merged list
+      mergedEntries.sort((a, b) => {
+        if (a.name && b.name) {
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        }
+        if (a.name && !b.name) return -1;
+        if (!a.name && b.name) return 1;
+        return a.cartId.localeCompare(b.cartId);
+      });
+    } else {
+      // No labels.db - create entries from owned carts only
+      mergedEntries = allOwnedIds.map(cartId => {
+        const meta = getCartMetadata(cartId);
+        return {
+          cartId,
+          index: -1,
+          name: getCartName(cartId),
+          region: meta.region,
+          languages: meta.languages,
+          videoMode: meta.videoMode,
+          releaseType: meta.releaseType,
+          revision: meta.revision,
+        };
+      });
+
+      // Sort
+      mergedEntries.sort((a, b) => {
+        if (a.name && b.name) {
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        }
+        if (a.name && !b.name) return -1;
+        if (!a.name && b.name) return 1;
+        return a.cartId.localeCompare(b.cartId);
+      });
+    }
+
+    // Get owned IDs for filtering if owned filter is set
+    let filterOwnedIds: Set<string> | undefined;
+    if (owned) {
+      filterOwnedIds = ownedIdsSet;
+    }
+
     // Apply filters if any are set
-    const filteredEntries = applyFilters(sortedEntries, { region, language, videoMode, search });
+    const filteredEntries = applyFilters(mergedEntries, { region, language, videoMode, search, ownedIds: filterOwnedIds });
 
     const totalEntries = filteredEntries.length;
     const totalPages = Math.ceil(totalEntries / pageSize);
@@ -540,13 +654,15 @@ router.get('/page/:page', async (req, res) => {
     const entries = filteredEntries.slice(start, end);
 
     res.json({
-      imported: true,
+      imported: true, // We have content to show (either labels or owned carts)
+      hasLabels: !!labelsEntries,
+      hasOwnedCarts: allOwnedIds.length > 0,
       page,
       pageSize,
       totalPages,
       totalEntries,
-      totalUnfiltered: sortedEntries.length,
-      filters: { region, language, videoMode },
+      totalUnfiltered: mergedEntries.length,
+      filters: { region, language, videoMode, owned },
       entries,
     });
   } catch (error) {
@@ -709,6 +825,9 @@ router.put('/:cartId', uploadImage.single('image'), async (req, res) => {
 
     await updateEntryInLabelsDb(cartIdNum, req.file.buffer);
 
+    // Invalidate sorted cache after updating
+    invalidateSortedCache();
+
     console.log(`Label for cartridge ${cartId} updated successfully`);
 
     res.json({
@@ -727,7 +846,21 @@ router.put('/:cartId', uploadImage.single('image'), async (req, res) => {
 router.get('/:cartId', async (req, res) => {
   try {
     const cartId = req.params.cartId;
-    const pngBuffer = await getLabelsDbImage(cartId);
+    let pngBuffer: Buffer | null = null;
+
+    // Check if we should read from SD card only
+    const readFromSD = process.env.READ_LABELS_FROM_SD === 'true';
+
+    if (readFromSD) {
+      // Only read from SD card, no fallback to local
+      const sdCards = await detectSDCards();
+      if (sdCards.length > 0) {
+        pngBuffer = await getLabelsDbImageFromPath(sdCards[0].labelsDbPath, cartId);
+      }
+    } else {
+      // Read from local labels.db
+      pngBuffer = await getLabelsDbImage(cartId);
+    }
 
     if (!pngBuffer) {
       return res.status(404).json({ error: 'Label not found' });
@@ -773,6 +906,447 @@ router.delete('/:cartId', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Failed to delete cartridge';
     res.status(500).json({ error: message });
   }
+});
+
+// GET /api/labels/compare/quick - Quick check if local and SD labels.db differ
+router.get('/compare/quick', async (_req, res) => {
+  try {
+    // Check if local labels.db exists
+    const hasLocal = await hasLocalLabelsDb();
+    if (!hasLocal) {
+      return res.status(400).json({ error: 'No local labels.db found' });
+    }
+
+    // Check for SD card
+    const sdCards = await detectSDCards();
+    if (sdCards.length === 0) {
+      return res.status(400).json({ error: 'No SD card detected' });
+    }
+
+    const localPath = getLocalLabelsDbPath();
+    const sdPath = sdCards[0].labelsDbPath;
+
+    const result = await compareQuick(localPath, sdPath);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in quick compare:', error);
+    res.status(500).json({ error: 'Failed to compare labels databases' });
+  }
+});
+
+// GET /api/labels/compare/detailed - Detailed comparison showing all differences
+router.get('/compare/detailed', async (req, res) => {
+  try {
+    const fullHash = req.query.fullHash === 'true';
+
+    // Check if local labels.db exists
+    const hasLocal = await hasLocalLabelsDb();
+    if (!hasLocal) {
+      return res.status(400).json({ error: 'No local labels.db found' });
+    }
+
+    // Check for SD card
+    const sdCards = await detectSDCards();
+    if (sdCards.length === 0) {
+      return res.status(400).json({ error: 'No SD card detected' });
+    }
+
+    const localPath = getLocalLabelsDbPath();
+    const sdPath = sdCards[0].labelsDbPath;
+
+    const result = await compareDetailed(localPath, sdPath, { fullImageHash: fullHash });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in detailed compare:', error);
+    res.status(500).json({ error: 'Failed to compare labels databases' });
+  }
+});
+
+// GET /api/labels/debug/benchmark-stream - Run debug benchmark with SSE progress
+// This is the streaming version that provides real-time progress updates
+router.get('/debug/benchmark-stream', async (_req, res) => {
+  // Check for SD card before setting up SSE
+  const sdCards = await detectSDCards();
+  if (sdCards.length === 0) {
+    res.status(400).json({ error: 'No SD card detected' });
+    return;
+  }
+
+  const sdCard = sdCards[0];
+  const sourceLabelsPath = path.join(process.cwd(), 'labels.db');
+  const debugDir = path.join(sdCard.path, 'Debug');
+  const debugLabelsPath = path.join(debugDir, 'labels.db');
+  const localPath = getLocalLabelsDbPath();
+
+  // Check source labels.db exists before SSE
+  try {
+    await stat(sourceLabelsPath);
+  } catch {
+    res.status(400).json({ error: 'No labels.db found in project root' });
+    return;
+  }
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendProgress = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const results: {
+    uploadToSD: { durationMs: number; bytesWritten: number };
+    createLocalDiffs: { durationMs: number; modifiedCartIds: string[] };
+    quickCheck: { durationMs: number; identical: boolean };
+    detailedCompare: { durationMs: number; modified: number; breakdown: any };
+    partialSync: { durationMs: number; entriesUpdated: number; bytesWritten: number; breakdown: any };
+  } = {} as any;
+
+  try {
+    // Ensure Debug directory exists
+    await mkdir(debugDir, { recursive: true });
+
+    // Get source file size for progress reporting
+    const sourceStats = await stat(sourceLabelsPath);
+
+    sendProgress({
+      type: 'start',
+      totalBytes: sourceStats.size,
+    });
+
+    console.log('Debug Benchmark: Starting...');
+
+    // Step 1: Upload labels.db to SD Card Debug folder
+    sendProgress({
+      type: 'phase',
+      phase: 'upload',
+      message: 'Uploading labels.db to SD Card...',
+    });
+
+    console.log('Debug Benchmark: Uploading to SD Card...');
+    const uploadStart = performance.now();
+
+    await copyFileWithProgress(
+      sourceLabelsPath,
+      debugLabelsPath,
+      (progress) => {
+        sendProgress({
+          type: 'progress',
+          phase: 'upload',
+          fileName: 'labels.db',
+          bytesWritten: progress.bytesWritten,
+          totalBytes: progress.totalBytes,
+          percentage: Math.round(progress.percentage),
+          speed: formatSpeed(progress.bytesPerSecond),
+          speedBytes: progress.bytesPerSecond,
+          eta: formatTime(progress.estimatedTimeRemainingMs),
+          etaMs: progress.estimatedTimeRemainingMs,
+          bytesWrittenFormatted: formatBytes(progress.bytesWritten),
+          totalBytesFormatted: formatBytes(progress.totalBytes),
+        });
+      },
+      50 // throttle to 50ms for smooth updates
+    );
+
+    results.uploadToSD = {
+      durationMs: performance.now() - uploadStart,
+      bytesWritten: sourceStats.size,
+    };
+    console.log(`Debug Benchmark: Upload complete (${results.uploadToSD.durationMs.toFixed(2)}ms)`);
+
+    // Step 2: Create local labels.db with 50 modified entries
+    sendProgress({
+      type: 'phase',
+      phase: 'create_diffs',
+      message: 'Creating local labels.db with 50 modified entries...',
+    });
+
+    console.log('Debug Benchmark: Creating local version with differences...');
+    const localDir = path.dirname(localPath);
+    await mkdir(localDir, { recursive: true });
+
+    const diffStart = performance.now();
+    const diffResult = await createModifiedLabelsDb(sourceLabelsPath, localPath, 50);
+    results.createLocalDiffs = {
+      durationMs: performance.now() - diffStart,
+      modifiedCartIds: diffResult.modifiedCartIds,
+    };
+    console.log(`Debug Benchmark: Local diffs created (${results.createLocalDiffs.durationMs.toFixed(2)}ms)`);
+
+    // Step 3: Quick Check
+    sendProgress({
+      type: 'phase',
+      phase: 'quick_check',
+      message: 'Running quick check comparison...',
+    });
+
+    console.log('Debug Benchmark: Running quick check...');
+    const quickResult = await compareQuick(localPath, debugLabelsPath);
+    results.quickCheck = {
+      durationMs: quickResult.durationMs,
+      identical: quickResult.identical,
+    };
+    console.log(`Debug Benchmark: Quick check complete (${results.quickCheck.durationMs.toFixed(2)}ms)`);
+
+    // Step 4: Detailed Compare
+    sendProgress({
+      type: 'phase',
+      phase: 'detailed_compare',
+      message: 'Running detailed comparison...',
+    });
+
+    console.log('Debug Benchmark: Running detailed compare...');
+    const detailedResult = await compareDetailed(localPath, debugLabelsPath, { fullImageHash: true });
+    results.detailedCompare = {
+      durationMs: detailedResult.durationMs,
+      modified: detailedResult.modified.length,
+      breakdown: detailedResult.breakdown,
+    };
+    console.log(`Debug Benchmark: Detailed compare complete (${results.detailedCompare.durationMs.toFixed(2)}ms)`);
+
+    // Step 5: Partial Sync (update only changed entries on SD card)
+    sendProgress({
+      type: 'phase',
+      phase: 'partial_sync',
+      message: 'Syncing 50 changed entries to SD Card...',
+    });
+
+    console.log('Debug Benchmark: Running partial sync...');
+    const syncResult = await syncChangedEntries(localPath, debugLabelsPath);
+    results.partialSync = {
+      durationMs: syncResult.durationMs,
+      entriesUpdated: syncResult.entriesUpdated,
+      bytesWritten: syncResult.bytesWritten,
+      breakdown: syncResult.breakdown,
+    };
+    console.log(`Debug Benchmark: Partial sync complete (${results.partialSync.durationMs.toFixed(2)}ms)`);
+
+    console.log('Debug Benchmark: Complete!');
+
+    sendProgress({
+      type: 'complete',
+      results,
+    });
+  } catch (error) {
+    console.error('Error in debug benchmark:', error);
+    sendProgress({
+      type: 'error',
+      error: `Benchmark failed: ${error}`,
+    });
+  }
+
+  res.end();
+});
+
+// POST /api/labels/debug/sync - Sync changed entries from local to SD debug folder
+router.post('/debug/sync', async (_req, res) => {
+  try {
+    const sdCards = await detectSDCards();
+    if (sdCards.length === 0) {
+      return res.status(400).json({ error: 'No SD card detected' });
+    }
+
+    const debugLabelsPath = path.join(sdCards[0].path, 'Debug', 'labels.db');
+    const localPath = getLocalLabelsDbPath();
+
+    // Check both files exist
+    try {
+      await stat(debugLabelsPath);
+      await stat(localPath);
+    } catch {
+      return res.status(400).json({ error: 'Debug labels.db or local labels.db not found. Run benchmark first.' });
+    }
+
+    const result = await syncChangedEntries(localPath, debugLabelsPath);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in debug sync:', error);
+    res.status(500).json({ error: 'Debug sync failed' });
+  }
+});
+
+// Chunk size configurations to benchmark
+const CHUNK_BENCHMARK_CONFIGS = [
+  { chunkSize: 64 * 1024, fsyncPerChunk: true, label: '64KB + fsync' },
+  { chunkSize: 128 * 1024, fsyncPerChunk: true, label: '128KB + fsync' },
+  { chunkSize: 256 * 1024, fsyncPerChunk: true, label: '256KB + fsync' },
+  { chunkSize: 512 * 1024, fsyncPerChunk: true, label: '512KB + fsync' },
+  { chunkSize: 1024 * 1024, fsyncPerChunk: true, label: '1MB + fsync' },
+  { chunkSize: 2 * 1024 * 1024, fsyncPerChunk: true, label: '2MB + fsync' },
+  { chunkSize: 256 * 1024, fsyncPerChunk: false, label: '256KB (no fsync)' },
+  { chunkSize: 1024 * 1024, fsyncPerChunk: false, label: '1MB (no fsync)' },
+  { chunkSize: 4 * 1024 * 1024, fsyncPerChunk: false, label: '4MB (no fsync)' },
+];
+
+// GET /api/labels/debug/chunk-benchmark-stream - Benchmark different chunk sizes
+router.get('/debug/chunk-benchmark-stream', async (req, res) => {
+  const iterations = parseInt(req.query.iterations as string) || 2;
+
+  // Check for SD card before setting up SSE
+  const sdCards = await detectSDCards();
+  if (sdCards.length === 0) {
+    res.status(400).json({ error: 'No SD card detected' });
+    return;
+  }
+
+  const sdCard = sdCards[0];
+  const sourceLabelsPath = path.join(process.cwd(), 'labels.db');
+  const debugDir = path.join(sdCard.path, 'Debug');
+  const debugLabelsPath = path.join(debugDir, 'labels.db');
+
+  // Check source labels.db exists before SSE
+  try {
+    await stat(sourceLabelsPath);
+  } catch {
+    res.status(400).json({ error: 'No labels.db found in project root' });
+    return;
+  }
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendProgress = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    // Ensure Debug directory exists
+    await mkdir(debugDir, { recursive: true });
+
+    const sourceStats = await stat(sourceLabelsPath);
+    const fileSize = sourceStats.size;
+
+    sendProgress({
+      type: 'start',
+      totalConfigs: CHUNK_BENCHMARK_CONFIGS.length,
+      iterations,
+      fileSize,
+      fileSizeFormatted: formatBytes(fileSize),
+    });
+
+    const results: Array<{
+      label: string;
+      chunkSize: number;
+      chunkSizeFormatted: string;
+      fsyncPerChunk: boolean;
+      runs: Array<{ durationMs: number; avgSpeed: number }>;
+      avgDurationMs: number;
+      avgSpeed: number;
+      avgSpeedFormatted: string;
+    }> = [];
+
+    for (let configIndex = 0; configIndex < CHUNK_BENCHMARK_CONFIGS.length; configIndex++) {
+      const config = CHUNK_BENCHMARK_CONFIGS[configIndex];
+
+      sendProgress({
+        type: 'config_start',
+        configIndex,
+        totalConfigs: CHUNK_BENCHMARK_CONFIGS.length,
+        label: config.label,
+        chunkSize: config.chunkSize,
+        chunkSizeFormatted: formatBytes(config.chunkSize),
+        fsyncPerChunk: config.fsyncPerChunk,
+      });
+
+      const runs: Array<{ durationMs: number; avgSpeed: number }> = [];
+
+      for (let iteration = 0; iteration < iterations; iteration++) {
+        sendProgress({
+          type: 'iteration_start',
+          configIndex,
+          iteration,
+          totalIterations: iterations,
+          label: config.label,
+        });
+
+        const result = await copyFileWithSettings(
+          sourceLabelsPath,
+          debugLabelsPath,
+          {
+            chunkSize: config.chunkSize,
+            fsyncPerChunk: config.fsyncPerChunk,
+            onProgress: (progress) => {
+              sendProgress({
+                type: 'progress',
+                configIndex,
+                iteration,
+                label: config.label,
+                percentage: Math.round(progress.percentage),
+                bytesWritten: progress.bytesWritten,
+                totalBytes: progress.totalBytes,
+                bytesWrittenFormatted: formatBytes(progress.bytesWritten),
+                totalBytesFormatted: formatBytes(progress.totalBytes),
+                speed: formatSpeed(progress.bytesPerSecond),
+                speedBytes: progress.bytesPerSecond,
+              });
+            },
+            throttleMs: 100,
+          }
+        );
+
+        runs.push({ durationMs: result.durationMs, avgSpeed: result.avgSpeed });
+
+        sendProgress({
+          type: 'iteration_complete',
+          configIndex,
+          iteration,
+          label: config.label,
+          durationMs: result.durationMs,
+          avgSpeed: result.avgSpeed,
+          avgSpeedFormatted: formatSpeed(result.avgSpeed),
+        });
+      }
+
+      const avgDurationMs = runs.reduce((sum, r) => sum + r.durationMs, 0) / runs.length;
+      const avgSpeed = runs.reduce((sum, r) => sum + r.avgSpeed, 0) / runs.length;
+
+      results.push({
+        label: config.label,
+        chunkSize: config.chunkSize,
+        chunkSizeFormatted: formatBytes(config.chunkSize),
+        fsyncPerChunk: config.fsyncPerChunk,
+        runs,
+        avgDurationMs,
+        avgSpeed,
+        avgSpeedFormatted: formatSpeed(avgSpeed),
+      });
+
+      sendProgress({
+        type: 'config_complete',
+        configIndex,
+        label: config.label,
+        avgDurationMs,
+        avgSpeed,
+        avgSpeedFormatted: formatSpeed(avgSpeed),
+      });
+    }
+
+    // Sort results by average speed (fastest first)
+    const sortedResults = [...results].sort((a, b) => b.avgSpeed - a.avgSpeed);
+
+    sendProgress({
+      type: 'complete',
+      results: sortedResults,
+      fastest: sortedResults[0],
+      slowest: sortedResults[sortedResults.length - 1],
+    });
+  } catch (error) {
+    console.error('Error in chunk benchmark:', error);
+    sendProgress({
+      type: 'error',
+      error: `Chunk benchmark failed: ${error}`,
+    });
+  }
+
+  res.end();
 });
 
 export default router;

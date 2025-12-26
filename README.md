@@ -1,92 +1,126 @@
 # A3D Manager
 
-**The unofficial companion app for managing your Analogue 3D N64 cartridge label artwork.**
+**The unofficial companion app for managing your Analogue 3D N64 cartridge collection.**
 
-A3D Manager is a utility that lets you browse, edit, and sync custom label artwork to your Analogue 3D. Build your perfect cartridge library with beautiful label images that display on the Analogue 3D home screen.
+A3D Manager is a desktop utility that lets you manage label artwork, per-game display and hardware settings, and controller pak saves for your Analogue 3D. Build and maintain your perfect cartridge library with full control over every aspect of your N64 gaming experience.
 
-![Labels Database](src/assets/screenshots/Label%20Database.png)
+![Cartridge Explorer](src/assets/screenshots/Cartridge%20Explorer.png)
 
 ---
 
 ## Features
 
-### Browse & Search Your Label Library
+### Cartridge Explorer
 
-Manage your entire N64 label collection with powerful search and filtering:
+Browse and manage your entire N64 cartridge collection:
 
-- **Real-time search** by game name or cart ID - even for cartridges not in our database
-- **Search by cart ID** to find and add artwork for any cartridge, including homebrew and flash carts
-- **Filter by region** (USA, Europe, Japan, and more)
-- **Filter by language and video mode** (NTSC/PAL)
+- **Real-time search** by game name or cart ID
+- **Filter by region, language, and video mode** (NTSC/PAL)
+- **Toggle between All and Owned** to focus on your personal collection
 - **Smart badges** identify known games, custom names, and unknown/homebrew carts
-- **Paginated grid view** for easy browsing
+- **Selection mode** for bulk operations on multiple cartridges
 
-> **Tip:** Don't know your cart ID? Insert your cartridge into your Analogue 3D, then check your SD card. The Analogue 3D creates a folder for each cartridge in `Library/N64/` using the cart's hex ID. Use that ID to search and add custom artwork!
+### Per-Game Display Settings
 
-### Edit Label Artwork
+Configure display settings individually for each cartridge:
 
-Click any cartridge to update its label artwork:
+- **Display Mode**: BVM, PVM, CRT, Scanlines, or Clean
+- **CRT Mode Options**: Beam Convergence (Horizontal/Vertical), Edge Overshoot, Edge Hardness, Image Size, Image Fit
+- **Clean Mode Options**: Interpolation Algorithm, Gamma Transfer, Sharpness, Image Size, Image Fit
+
+![Edit Cartridge - Settings](src/assets/screenshots/Edit%20Cartridge%20-%20Settings.png)
+
+### Per-Game Hardware Settings
+
+Fine-tune hardware behavior for each game:
+
+- **Virtual Expansion Pak** toggle
+- **Region Override**: Auto, NTSC, or PAL
+- **De-Blur** enhancement
+- **32-bit Color** mode
+- **Disable Texture Filtering** option
+- **Disable Antialiasing** option
+- **Force Original Hardware** mode
+- **Overclock**: Auto, Enhanced, Enhanced+, or Unleashed
+
+All settings changes sync automatically to your SD card when connected.
+
+### Game Pak Management
+
+Full control over controller pak (Game Pak) save data:
+
+- **View save data usage** with pages used, pages free, and capacity percentage
+- **Sync detection** shows when local and SD card saves differ
+- **Download from SD** to backup saves locally
+- **Upload to SD** to restore saves
+- **Import/Export** game pak files (.img format)
+- **Backup system** with named backups, descriptions, restore, and export
+
+![Edit Cartridge - Game Paks](src/assets/screenshots/Edit%20Cartridge%20-%20Game%20Paks.png)
+
+### Label Artwork
+
+Customize the label artwork displayed on the Analogue 3D home screen:
 
 - **Drag-and-drop** image upload (PNG, JPG, WebP)
 - **Automatic resizing** to the required 74x86 pixel format
-- **Preview** your current and new labels side-by-side
-- **Delete** cartridge entries you no longer need
+- **Side-by-side preview** of current and new labels
+- **Custom names** for homebrew and flash carts
 
-![Edit Cartridge](src/assets/screenshots/Edit%20Cartridge.png)
+![Edit Cartridge - Label](src/assets/screenshots/Edit%20Cartridge%20-%20Label.png)
 
-### Add Custom Cartridges
+### SD Card Integration
 
-Full support for homebrew, reproduction carts, and flash carts:
+Seamless synchronization with your Analogue 3D:
 
-- Enter the 8-character hex cart ID (found in your SD card's `Library/N64/` folder structure)
-- **Automatic game lookup** - if we recognize the cart ID, we'll fill in the game name, region, and other metadata automatically
-- Set **custom names** for unknown cartridges like flash carts or homebrew
-- Upload artwork for any cartridge, known or unknown
-
-This is especially useful for **flash cart users** - just insert your flash cart, grab the ID from your SD card, and add custom artwork for it right away.
-
-![Add New Cartridge](src/assets/screenshots/Add%20New%20Cartridge.png)
+- **Auto-detect** connected Analogue 3D SD cards
+- **Real-time sync status** indicator in the header
+- **Automatic settings sync** when SD card is connected
+- **Conflict detection** with resolution options when local and SD card data differ
+- **Import games from SD** to discover cartridges you've played
 
 ### Import & Export
 
-Flexible options for managing your labels database:
+Flexible backup and sharing options:
 
-- **Import** existing `labels.db` files with three merge modes:
-  - **Replace** - Start fresh with the imported database
-  - **Merge (overwrite)** - Add new labels and update existing ones
-  - **Merge (skip)** - Add new labels but preserve your existing artwork
-- **Export** your `labels.db` for manual backup or sharing
+- **Bundle Export** (.a3d format) with selective data:
+  - Labels (artwork)
+  - Per-game settings
+  - Game Pak saves
+  - Game Pak backups
+  - Ownership data
+- **Selection Export** to export specific cartridges
+- **Bundle Import** with merge options for handling conflicts
+- **Import labels.db** directly from file or community collections
 
-### Sync to SD Card
+![Export Selection](src/assets/screenshots/Export%20Selection.png)
 
-Seamlessly sync your labels to your Analogue 3D:
+### Getting Started Experience
 
-- **Auto-detect** connected Analogue 3D SD cards
-- **Preview changes** before syncing
-- **Real-time progress** with transfer speed and ETA
-- **Manual export** option if you prefer to copy files yourself
+Easy onboarding for new users:
 
-![Sync to SD Card](src/assets/screenshots/Sync%20to%20SD%20Card.png)
+- **Import Games from SD Card**: Scan your SD card to discover cartridges and download their settings
+- **Download Labels from SD Card**: Import existing label artwork from your Analogue 3D
 
-![Sync Progress](src/assets/screenshots/Sync%20Progress.png)
+![Initial State](src/assets/screenshots/Initial%20State.png)
 
-### Safe by Default
+### Sync Progress
 
-Your SD card is never modified without your explicit approval:
+Real-time feedback during sync operations:
 
-- All edits are stored locally first
-- Preview exactly what will change before syncing
-- Confirmation dialogs for destructive operations
-- Export and backup your database anytime
+- **Progress bar** with percentage complete
+- **Transfer speed** and data transferred
+- **Estimated time remaining**
+
+![Sync Labels Progress](src/assets/screenshots/Sync%20Labels%20Progress.png)
 
 ### Pre-Built Cart Database
 
-We've done the heavy lifting so you don't have to:
+Comprehensive N64 cartridge database:
 
-- **340+ Analogue 3D cart IDs** already mapped and annotated
-- Each entry includes game name, region, language, video mode, and more
-- Just enter a cart ID and we'll automatically fill in all the details
-- Community-driven - help us expand the database by contributing!
+- **340+ Analogue 3D cart IDs** mapped and annotated
+- Automatic game name, region, language, and video mode lookup
+- Support for homebrew and flash carts with custom naming
 
 ---
 
@@ -115,42 +149,29 @@ The app will open at `http://localhost:5173` with the backend API running on por
 
 ### Quick Start
 
-1. **Import your existing labels** - If you have a `labels.db` from your Analogue 3D, import it to get started
-2. **Browse and edit** - Search for games, click to edit labels, upload your artwork
-3. **Add new cartridges** - Add entries for homebrew or carts not in the database
-4. **Sync to SD card** - Connect your Analogue 3D SD card and sync your changes
+1. **Connect your SD card** - Insert your Analogue 3D SD card into your computer
+2. **Import your games** - Use "Import Games from SD Card" to discover your cartridges
+3. **Browse and configure** - Search for games, adjust settings, upload artwork
+4. **Changes sync automatically** - When your SD card is connected, changes sync in real-time
 
 ---
 
 ## How It Works
 
-The Analogue 3D identifies N64 cartridges using a CRC32 checksum of the first 8 KiB of ROM data. This creates a unique 8-character hex ID for each cartridge. A3D Manager lets you associate custom label artwork with these IDs, stored in the `labels.db` file on your SD card.
+The Analogue 3D identifies N64 cartridges using a CRC32 checksum of the first 8 KiB of ROM data. This creates a unique 8-character hex ID for each cartridge. A3D Manager uses these IDs to associate custom label artwork, display settings, hardware settings, and controller pak saves with each cartridge.
 
-The app stores your changes locally in `.local/` until you explicitly sync. This means your SD card is never modified accidentally.
+### Data Storage
+
+- **Local storage**: All data is stored in `.local/` until explicitly synced
+- **SD card sync**: When connected, settings and game paks sync automatically
+- **Labels**: Synced via the "Sync Labels" button in the header
 
 ### Technical Documentation
 
 - [Labels DB Specification](docs/LABELS_DB_SPECIFICATION.md) - Binary format details
 - [Cart ID Algorithm](docs/CART_ID_ALGORITHM.md) - How cartridge identification works
 - [SD Card Format](docs/ANALOGUE_3D_SD_CARD_FORMAT.md) - Analogue 3D SD card structure
-
----
-
-## Roadmap
-
-We have exciting features planned for future releases:
-
-### Hardware & Display Settings Manager
-Manage per-game hardware and display settings for your Analogue 3D. Export and import controls for sharing configurations with the community or backing up your personal settings.
-
-### Game Pak Manager
-Back up, restore, and share game paks for different games. Full support for importing and exporting game pak configurations.
-
-### Comprehensive Export/Import System
-Granular and bulk export/import of settings, labels, game paks, and more. Perfect for personal backups or sharing your entire setup with others.
-
-### Flash Cart & Homebrew Title Support
-If Analogue enables the ability to provide custom titles for flash carts and homebrew cartridges, we'd love to add support for this feature. Currently this is a system limitation on the Analogue 3D side.
+- [Cartridge Management](docs/CARTRIDGE_MANAGEMENT.md) - Per-game settings and game pak management
 
 ---
 
