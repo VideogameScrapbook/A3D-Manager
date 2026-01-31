@@ -1324,6 +1324,12 @@ function SettingsEditor({ cartId, settings: initialSettings, sdCardPath, onSetti
           />
 
           <ToggleSwitch
+            label="Force Progressive Output"
+            checked={settings.hardware.forceProgressiveOutput ?? false}
+            onChange={(val) => updateHardwareSetting('forceProgressiveOutput', val)}
+          />
+
+          <ToggleSwitch
             label="Disable Texture Filtering"
             checked={settings.hardware.disableTextureFiltering}
             onChange={(val) => updateHardwareSetting('disableTextureFiltering', val)}
